@@ -1,0 +1,5 @@
+{
+  "name": "LMS Study Scheduler",
+  "description": "A comprehensive study schedule manager that visualizes LMS course data in Calendar and List views.",
+  "requestFramePermissions": []
+}

@@ -1,0 +1,22 @@
+{
+  "name": "LMS Study Scheduler",
+  "short_name": "LMS Schedule",
+  "description": "Quản lý lịch học và bài tập cá nhân hóa",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "https://aistudiocdn.com/lucide-react@^0.555.0/icons/graduation-cap.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://aistudiocdn.com/lucide-react@^0.555.0/icons/graduation-cap.svg",
+      "type": "image/svg+xml",
+      "sizes": "512x512"
+    }
+  ]
+}
