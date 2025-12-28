@@ -1,19 +1,22 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Calendar as CalendarIcon, List as ListIcon, GraduationCap, Filter, Loader2, Settings, UploadCloud, Menu, Clock, Bell, Plus, Info, Eye, EyeOff, WifiOff, Wifi } from 'lucide-react';
+import { Calendar as CalendarIcon, List as ListIcon, GraduationCap, Filter, Loader2, Settings, UploadCloud, Menu, Clock, Bell, Plus, Info, Eye, EyeOff, WifiOff, LogOut, User, LayoutTemplate } from 'lucide-react';
 import CalendarView from './components/CalendarView';
 import ListView from './components/ListView';
 import WeeklySchedule from './components/WeeklySchedule';
 import EventModal from './components/EventModal';
 import DataSettingsModal from './components/DataSettingsModal';
 import Sidebar from './components/Sidebar';
-import AlarmRingingModal from './components/AlarmRingingModal';
 import AddPersonalEventModal from './components/AddPersonalEventModal';
+import MobileBottomNav from './components/MobileBottomNav';
+import AuthPage from './components/AuthPage';
 import HeartsBackground from './components/HeartsBackground';
 import UIKit from './components/UIKit';
 import { CalendarEvent, Course, CalendarData, ScheduleMetadata, ThemeColor, AppView, MultiMonthData } from './types';
 import { filterEventsByCourse, shouldHideEvent, requestNotificationPermission, getThemeColors } from './utils';
 import { initDB, getSchedulesFromDB, getFullScheduleData, saveScheduleToDB, updateEventMetaInDB, deletePersonalEventFromDB } from './lib/db';
+import { auth } from './lib/firebase';
+import { onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
 
 const LS_KEY_THEME = 'lms_theme_color';
 
@@ -31,6 +34,8 @@ const App: React.FC = () => {
   const theme = getThemeColors(themeColor);
   const [showCompleted, setShowCompleted] = useState<boolean>(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [user, setUser] = useState<any>(null);
+  const [showAuth, setShowAuth] = useState(false);
 
   const [isLoadingDB, setIsLoadingDB] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -42,9 +47,13 @@ const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isAddEventOpen, setIsAddEventOpen] = useState(false);
 
-  // 1. Initialize DB and Network status
   useEffect(() => {
     init();
+    
+    // Firebase Auth Observer
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+        setUser(firebaseUser);
+    });
     
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
@@ -53,6 +62,7 @@ const App: React.FC = () => {
     window.addEventListener('offline', handleOffline);
     
     return () => {
+      unsubscribe();
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
@@ -72,7 +82,6 @@ const App: React.FC = () => {
   const refreshSchedules = (isInitial: boolean = false) => {
     const dbSchedules = getSchedulesFromDB();
     setSchedules(dbSchedules);
-    
     if (isInitial && dbSchedules.length > 0) {
         handleLoadSchedule(dbSchedules[0].id);
     } else if (currentScheduleId) {
@@ -83,7 +92,6 @@ const App: React.FC = () => {
   const handleLoadSchedule = (id: string) => {
     const fullData = getFullScheduleData(id);
     const scheduleMeta = getSchedulesFromDB().find(s => s.id === id);
-    
     if (fullData && scheduleMeta) {
         setCurrentScheduleId(id);
         setCurrentScheduleName(scheduleMeta.name);
@@ -103,10 +111,18 @@ const App: React.FC = () => {
       localStorage.setItem(LS_KEY_THEME, color);
   };
 
+  const handleLogout = async () => {
+      try {
+          await signOut(auth);
+          setUser(null);
+      } catch (e) {
+          console.error("Logout error", e);
+      }
+  };
+
   const handleImportSchedule = async (newData: CalendarData, name: string, isNew: boolean) => {
       setIsSaving(true);
       const id = (isNew || !currentScheduleId) ? Date.now().toString() : currentScheduleId!;
-      
       let updatedMultiMonth: MultiMonthData;
       if (isNew || !multiMonthData) {
           updatedMultiMonth = {
@@ -120,16 +136,13 @@ const App: React.FC = () => {
               lastUpdatedPeriod: newData.periodname
           };
       }
-
       const eventsToKeep = isNew ? [] : personalEvents;
       saveScheduleToDB(id, name, updatedMultiMonth, eventsToKeep);
-      
       setMultiMonthData(updatedMultiMonth);
       setPersonalEvents(eventsToKeep);
       setCurrentScheduleId(id);
       setCurrentScheduleName(name);
       refreshSchedules();
-      
       setIsSaving(false);
   };
 
@@ -138,10 +151,8 @@ const App: React.FC = () => {
       const next = new Set<number>(prev);
       const isNowCompleted = !next.has(id);
       if (isNowCompleted) next.add(id); else next.delete(id);
-      
       const currentAlarm = alarms[id] !== undefined ? alarms[id] : null;
       updateEventMetaInDB(id, isNowCompleted, currentAlarm);
-      
       return next;
     });
   };
@@ -159,38 +170,22 @@ const App: React.FC = () => {
   const handleAddPersonalEvent = (d: any) => {
       const ts = Math.floor(new Date(`${d.date}T${d.time}`).getTime()/1000);
       const newEvent: CalendarEvent = { 
-          id: Date.now(), 
-          activityname: d.title, 
-          description: d.description, 
-          timestart: ts, 
-          timesort: ts,
-          formattedtime: d.time, 
-          isPersonal: true, 
+          id: Date.now(), activityname: d.title, description: d.description, 
+          timestart: ts, timesort: ts, formattedtime: d.time, isPersonal: true, 
           icon: { iconurl: "", component: "", alttext: "" }, 
           course: { id: 0, fullname: "Cá nhân", shortname: "Cá nhân", viewurl: "", coursecategory: "" }, 
-          modulename: "personal",
-          name: d.title,
-          location: "",
-          component: "personal",
-          visible: 1,
-          url: "",
-          isactionevent: true
+          modulename: "personal", name: d.title, location: "", component: "personal", visible: 1, url: "", isactionevent: true
       };
-
       const nextPersonal = [...personalEvents, newEvent];
       setPersonalEvents(nextPersonal);
-      if (currentScheduleId) {
-          saveScheduleToDB(currentScheduleId, currentScheduleName, multiMonthData, nextPersonal);
-      }
+      if (currentScheduleId) saveScheduleToDB(currentScheduleId, currentScheduleName, multiMonthData, nextPersonal);
   };
 
   const handleDeletePersonalEvent = (id: number) => {
       const nextPersonal = personalEvents.filter(e => e.id !== id);
       setPersonalEvents(nextPersonal);
       deletePersonalEventFromDB(id);
-      if (currentScheduleId) {
-          saveScheduleToDB(currentScheduleId, currentScheduleName, multiMonthData, nextPersonal);
-      }
+      if (currentScheduleId) saveScheduleToDB(currentScheduleId, currentScheduleName, multiMonthData, nextPersonal);
   };
 
   const allEvents = useMemo(() => {
@@ -220,6 +215,7 @@ const App: React.FC = () => {
     return Array.from(uniqueCourses.values());
   }, [allEvents]);
 
+  if (showAuth) return <AuthPage onLoginSuccess={() => setShowAuth(false)} onBack={() => setShowAuth(false)} />;
   if (isLoadingDB) return <div className="min-h-screen bg-gray-50 flex items-center justify-center"><div className="text-center"><Loader2 className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" /><p className="font-bold text-gray-600">Nạp Database SQLite...</p></div></div>;
   if (view === 'uikit') return <UIKit onBack={() => setView('weekly')} currentTheme={themeColor} />;
 
@@ -240,58 +236,94 @@ const App: React.FC = () => {
 
       {themeColor === 'rose' && <HeartsBackground />}
 
-      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-        <header className="bg-white/80 backdrop-blur-md shrink-0 z-30 px-4 sm:px-6 py-3 border-b border-gray-100/50">
-            <div className="flex justify-between items-center max-w-7xl mx-auto">
+      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative">
+        {/* Header - Optimized for Mobile */}
+        <header className="bg-white/90 backdrop-blur-md shrink-0 z-30 px-4 py-3 border-b border-gray-100 transition-all sticky top-0">
+            <div className="flex justify-between items-center max-w-5xl mx-auto">
                 <div className="flex items-center gap-3">
-                    <button onClick={() => setIsSidebarOpen(true)} className="p-2 -ml-2 text-gray-600 hover:bg-gray-100 rounded-full lg:hidden transition-colors"><Menu size={24} /></button>
-                    <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-xl text-white hidden sm:block shadow-sm ${theme.bg}`}><GraduationCap size={24} /></div>
-                        <div>
-                            <h1 className="text-xl font-bold text-gray-800 tracking-tight flex items-center gap-2"><span>LMS Scheduler</span> <span className="text-[10px] bg-gray-900 text-white px-1.5 py-0.5 rounded uppercase">SQLite</span></h1>
-                            <div className="flex items-center gap-2">
-                                {currentScheduleName && <p className="text-xs text-gray-500 font-medium">{currentScheduleName}</p>}
-                                {!isOnline && (
-                                    <div className="flex items-center gap-1 bg-gray-100 px-1.5 py-0.5 rounded-md text-gray-500">
-                                        <WifiOff size={10} />
-                                        <span className="text-[8px] font-bold uppercase">Offline</span>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
+                    {/* Only show logo on Desktop, Sidebar toggle handled by Bottom Nav on Mobile */}
+                    <div className="hidden lg:flex items-center gap-3">
+                        <div className={`p-2 rounded-xl text-white shadow-sm ${theme.bg}`}><GraduationCap size={24} /></div>
+                    </div>
+                    <div>
+                         {/* Mobile Heading Style */}
+                        <h1 className="text-xl sm:text-2xl font-bold text-gray-800 tracking-tight flex flex-col sm:flex-row sm:items-center sm:gap-2 leading-none sm:leading-normal">
+                           <span>LMS Scheduler</span>
+                           {!isOnline && <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded uppercase w-fit mt-1 sm:mt-0"><WifiOff size={10} className="inline mr-1"/>Offline</span>}
+                        </h1>
+                        {currentScheduleName && <p className="text-xs text-gray-500 font-medium truncate max-w-[200px] sm:max-w-none">{currentScheduleName}</p>}
                     </div>
                 </div>
-                <div className="flex items-center gap-2 sm:gap-4">
-                    <button onClick={() => setIsAddEventOpen(true)} className="hidden sm:flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-full transition-all shadow-sm" disabled={!multiMonthData}><Plus size={18} /><span>Thêm kế hoạch</span></button>
-                    <div className="hidden sm:flex bg-gray-100/50 p-1 rounded-full border border-gray-200">
+
+                <div className="flex items-center gap-2 sm:gap-3">
+                    {user ? (
+                        <div className="flex items-center gap-1 sm:gap-2 pl-1 pr-1 sm:px-3 py-1 bg-green-50 rounded-full border border-green-100 cursor-pointer" onClick={() => setShowAuth(true)}>
+                            <div className="w-7 h-7 bg-green-100 rounded-full flex items-center justify-center text-green-700">
+                                <User size={14} />
+                            </div>
+                            <span className="text-xs font-bold text-green-700 max-w-[80px] truncate hidden sm:block">{user.displayName || 'User'}</span>
+                        </div>
+                    ) : (
+                        <button onClick={() => setShowAuth(true)} className="p-2 sm:px-4 sm:py-2 bg-blue-50 text-blue-700 text-xs font-bold rounded-full border border-blue-100 hover:bg-blue-100 transition-colors">
+                            <span className="hidden sm:inline">Đăng nhập</span>
+                            <span className="sm:hidden"><User size={20} /></span>
+                        </button>
+                    )}
+                    
+                    {/* Desktop View Switcher */}
+                    <div className="hidden lg:flex bg-gray-100/50 p-1 rounded-full border border-gray-200">
                         <button onClick={() => setView('weekly')} disabled={!multiMonthData} className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all flex items-center gap-2 ${view === 'weekly' ? `bg-white ${theme.textDark} shadow-sm` : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'}`}><Clock size={16} /> Tuần</button>
                         <button onClick={() => setView('calendar')} disabled={!multiMonthData} className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all flex items-center gap-2 ${view === 'calendar' ? `bg-white ${theme.textDark} shadow-sm` : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'}`}><CalendarIcon size={16} /> Lịch</button>
                         <button onClick={() => setView('list')} disabled={!multiMonthData} className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all flex items-center gap-2 ${view === 'list' ? `bg-white ${theme.textDark} shadow-sm` : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'}`}><ListIcon size={16} /> DS</button>
                     </div>
-                    <button onClick={() => setIsSettingsOpen(true)} className={`p-2.5 text-gray-500 ${theme.text} ${theme.bgLight} rounded-full transition-colors hidden sm:block`}><Settings size={20} /></button>
+
+                    {/* Settings Button (Desktop Only) */}
+                    <button onClick={() => setIsSettingsOpen(true)} className={`hidden lg:block p-2.5 text-gray-500 ${theme.text} ${theme.bgLight} rounded-full transition-colors`}><Settings size={20} /></button>
                 </div>
             </div>
         </header>
 
-        <main className="flex-1 w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 overflow-y-auto pb-24 sm:pb-8">
+        {/* Main Content Area */}
+        <main className="flex-1 w-full max-w-5xl mx-auto px-0 sm:px-6 lg:px-8 overflow-y-auto pb-24 sm:pb-8 pt-2 sm:pt-6">
             {isSaving && <div className="fixed top-20 right-8 bg-white p-3 rounded-2xl shadow-xl z-50 flex items-center gap-3 border border-gray-100 animate-bounce"><Loader2 className="animate-spin text-blue-600" size={18} /><span className="text-xs font-bold">Ghi vào DB...</span></div>}
             
             {!multiMonthData ? (
                 <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-                    <div className="bg-white p-8 rounded-3xl shadow-sm mb-6 border border-gray-100"><UploadCloud size={64} className={`${theme.textLight} mx-auto mb-4`} /><h2 className="text-2xl font-bold text-gray-900 mb-2">Chưa có lịch được nạp</h2><p className="text-gray-500 max-w-xs mx-auto mb-6">Mọi thay đổi của bạn sẽ được lưu trực tiếp vào cơ sở dữ liệu SQLite cục bộ và hoạt động tốt ngay cả khi không có mạng.</p><button onClick={() => setIsSettingsOpen(true)} className={`px-8 py-3 ${theme.bg} text-white rounded-full font-semibold shadow-lg ${theme.shadow}`}>Bắt đầu ngay</button></div>
+                    <div className="bg-white p-8 rounded-3xl shadow-sm mb-6 border border-gray-100"><UploadCloud size={64} className={`${theme.textLight} mx-auto mb-4`} /><h2 className="text-2xl font-bold text-gray-900 mb-2">Chưa có lịch được nạp</h2><p className="text-gray-500 max-w-xs mx-auto mb-6">Mọi thay đổi của bạn sẽ được lưu trực tiếp vào cơ sở dữ liệu SQLite cục bộ và hỗ trợ đồng bộ Firebase Cloud.</p><button onClick={() => setIsSettingsOpen(true)} className={`px-8 py-3 ${theme.bg} text-white rounded-full font-semibold shadow-lg ${theme.shadow}`}>Bắt đầu ngay</button></div>
                 </div>
             ) : (
                 <>
-                    {(view === 'calendar' || view === 'list') && (
-                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-5">
-                            <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-                                <div className="relative w-full sm:w-[300px] group"><div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400"><Filter size={18} /></div><select value={selectedCourse} onChange={(e) => setSelectedCourse(e.target.value)} className="block w-full pl-11 pr-10 py-3 text-sm border-0 ring-1 ring-gray-200 focus:ring-2 focus:ring-blue-500 rounded-2xl shadow-sm bg-white appearance-none"><option value="all">Tất cả các khóa học</option><option value="personal">✦ Kế hoạch cá nhân</option>{courses.filter(c => c.id !== 0).map(course => (<option key={course.id} value={course.id}>{course.shortname} - {course.fullname}</option>))}</select></div>
-                                <button onClick={() => setShowCompleted(!showCompleted)} className={`flex items-center gap-2 px-4 py-3 rounded-2xl text-sm font-medium border border-gray-200 transition-all shadow-sm w-full sm:w-auto justify-center ${showCompleted ? 'bg-gray-800 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>{showCompleted ? <Eye size={18} /> : <EyeOff size={18} />}<span>{showCompleted ? "Hiện việc đã xong" : "Đang ẩn việc đã xong"}</span></button>
+                    {/* Filter Bar */}
+                    <div className="px-4 sm:px-0 mb-4 sm:mb-6">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                           {/* Filter Dropdown */}
+                            <div className="relative w-full sm:w-[280px] group">
+                                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400"><Filter size={18} /></div>
+                                <select 
+                                    value={selectedCourse} 
+                                    onChange={(e) => setSelectedCourse(e.target.value)} 
+                                    className="block w-full pl-11 pr-10 py-3 text-sm font-medium border-0 ring-1 ring-gray-200 focus:ring-2 focus:ring-blue-500 rounded-2xl shadow-sm bg-white appearance-none truncate transition-shadow"
+                                >
+                                    <option value="all">Tất cả các khóa học</option>
+                                    <option value="personal">✦ Kế hoạch cá nhân</option>
+                                    {courses.filter(c => c.id !== 0).map(course => (<option key={course.id} value={course.id}>{course.shortname}</option>))}
+                                </select>
                             </div>
-                        </div>
-                    )}
 
-                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            {/* Show Completed Toggle */}
+                             <button 
+                                onClick={() => setShowCompleted(!showCompleted)} 
+                                className={`flex items-center justify-center gap-2 px-4 py-3 rounded-2xl text-sm font-bold border transition-all shadow-sm w-full sm:w-auto
+                                    ${showCompleted ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}
+                                `}
+                            >
+                                {showCompleted ? <Eye size={18} /> : <EyeOff size={18} />}
+                                <span>{showCompleted ? "Hiện việc đã xong" : "Ẩn việc đã xong"}</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 px-3 sm:px-0">
                         {view === 'calendar' ? (
                             <CalendarView periods={multiMonthData.periods} filteredCourseId={selectedCourse} onEventClick={setSelectedEvent} alarms={alarms} themeColor={themeColor} completedEvents={completedEvents} showCompleted={showCompleted} />
                         ) : view === 'list' ? (
@@ -304,6 +336,23 @@ const App: React.FC = () => {
             )}
         </main>
 
+        {/* Floating Action Button (Mobile) */}
+        <button
+            onClick={() => setIsAddEventOpen(true)}
+            className={`fixed right-4 bottom-20 lg:bottom-8 lg:right-8 w-14 h-14 rounded-2xl ${theme.bg} text-white shadow-lg ${theme.shadow} flex items-center justify-center z-40 transition-transform active:scale-90 hover:scale-105`}
+            aria-label="Thêm sự kiện"
+        >
+            <Plus size={32} />
+        </button>
+
+        {/* Bottom Navigation (Mobile) */}
+        <MobileBottomNav 
+            currentView={view} 
+            onChangeView={setView} 
+            onOpenMenu={() => setIsSidebarOpen(true)}
+            themeColor={themeColor}
+        />
+
         <EventModal event={selectedEvent} isCompleted={selectedEvent ? completedEvents.has(selectedEvent.id) : false} alarmMinutes={selectedEvent ? (alarms[selectedEvent.id] !== undefined ? alarms[selectedEvent.id] : null) : null} onToggleComplete={toggleEventCompletion} onSetAlarm={handleSetAlarm} onDelete={handleDeletePersonalEvent} onClose={() => setSelectedEvent(null)} themeColor={themeColor} />
         <AddPersonalEventModal isOpen={isAddEventOpen} onClose={() => setIsAddEventOpen(false)} onAdd={handleAddPersonalEvent} />
         <DataSettingsModal 
@@ -315,6 +364,7 @@ const App: React.FC = () => {
             onSetTheme={handleSetTheme} 
             existingMonths={multiMonthData ? Object.keys(multiMonthData.periods) : []}
             onRefreshApp={() => refreshSchedules(true)}
+            onOpenAuth={() => setShowAuth(true)}
         />
       </div>
     </div>

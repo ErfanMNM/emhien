@@ -1,8 +1,8 @@
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { CalendarEvent, ThemeColor } from '../types';
-import { formatDate, getThemeColors, cleanHtml } from '../utils';
-import { CheckCircle2, Circle, AlertTriangle, BookOpen, BellRing, Calendar, Eye, EyeOff } from 'lucide-react';
+import { formatDate, getThemeColors, cleanHtml, getEventStyle } from '../utils';
+import { CheckCircle2, Circle, AlertTriangle, BookOpen, BellRing, Calendar, Eye, EyeOff, MapPin, AlignLeft } from 'lucide-react';
 
 interface WeeklyScheduleProps {
   events: CalendarEvent[];
@@ -27,25 +27,48 @@ const WeeklySchedule: React.FC<WeeklyScheduleProps> = ({
 }) => {
   const theme = getThemeColors(themeColor);
 
-  // Lấy ra các bài kiểm tra (quiz) và bài tập (assign)
+  const { startTimestamp, endTimestamp, rangeLabel } = useMemo(() => {
+      const now = new Date();
+      const startOfWeek = new Date(now);
+      const currentDay = startOfWeek.getDay();
+      const distanceToMonday = currentDay === 0 ? 6 : currentDay - 1;
+      
+      startOfWeek.setDate(now.getDate() - distanceToMonday);
+      startOfWeek.setHours(0, 0, 0, 0);
+      
+      const nextMonday = new Date(startOfWeek);
+      nextMonday.setDate(startOfWeek.getDate() + 7);
+      nextMonday.setHours(0, 0, 0, 0);
+
+      const fStart = `${startOfWeek.getDate()}/${startOfWeek.getMonth() + 1}`;
+      const fEnd = `${nextMonday.getDate()}/${nextMonday.getMonth() + 1}`;
+
+      return {
+          startTimestamp: Math.floor(startOfWeek.getTime() / 1000),
+          endTimestamp: Math.floor(nextMonday.getTime() / 1000),
+          rangeLabel: `${fStart} - ${fEnd}`
+      };
+  }, []);
+
   const studyTasks = events
-    .filter(e => e.modulename === 'quiz' || e.modulename === 'assign' || e.isPersonal)
+    .filter(e => {
+        const isTypeValid = e.modulename === 'quiz' || e.modulename === 'assign' || e.isPersonal || e.modulename === 'forum';
+        const isWithinWeek = e.timestart >= startTimestamp && e.timestart < endTimestamp;
+        return isTypeValid && isWithinWeek;
+    })
     .sort((a, b) => a.timestart - b.timestart);
 
-  // Tính toán thống kê
   const totalTasks = studyTasks.length;
   const completedCount = studyTasks.filter(t => completedEvents.has(t.id)).length;
   const progress = totalTasks === 0 ? 0 : Math.round((completedCount / totalTasks) * 100);
 
-  // Lọc list hiển thị
   const incompleteTasks = studyTasks.filter(t => !completedEvents.has(t.id));
   const completedTasksList = studyTasks.filter(t => completedEvents.has(t.id));
   
   const displayList = showCompleted 
-    ? [...incompleteTasks, ...completedTasksList].slice(0, 30)
-    : incompleteTasks.slice(0, 20);
+    ? [...incompleteTasks, ...completedTasksList]
+    : incompleteTasks;
 
-  // Nhóm tasks theo ngày
   const groupedTasks: Record<string, CalendarEvent[]> = {};
   displayList.forEach(task => {
       const dateKey = formatDate(task.timestart);
@@ -61,153 +84,150 @@ const WeeklySchedule: React.FC<WeeklyScheduleProps> = ({
       return timestampA - timestampB;
   });
 
-  const getDayStyles = (timestamp: number) => {
-      const day = new Date(timestamp * 1000).getDay();
-      switch (day) {
-          case 1: return { border: 'border-yellow-400', bg: 'bg-yellow-50', text: 'text-yellow-700', badge: 'bg-yellow-100 text-yellow-800' };
-          case 2: return { border: 'border-pink-400', bg: 'bg-pink-50', text: 'text-pink-700', badge: 'bg-pink-100 text-pink-800' };
-          case 3: return { border: 'border-green-400', bg: 'bg-green-50', text: 'text-green-700', badge: 'bg-green-100 text-green-800' };
-          case 4: return { border: 'border-orange-400', bg: 'bg-orange-50', text: 'text-orange-700', badge: 'bg-orange-100 text-orange-800' };
-          case 5: return { border: 'border-blue-400', bg: 'bg-blue-50', text: 'text-blue-700', badge: 'bg-blue-100 text-blue-800' };
-          case 6: return { border: 'border-purple-400', bg: 'bg-purple-50', text: 'text-purple-700', badge: 'bg-purple-100 text-purple-800' };
-          case 0: return { border: 'border-red-400', bg: 'bg-red-50', text: 'text-red-700', badge: 'bg-red-100 text-red-800' };
-          default: return { border: 'border-gray-200', bg: 'bg-white', text: 'text-gray-700', badge: 'bg-gray-100 text-gray-800' };
-      }
-  };
-
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-        <div>
-          <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-            <BookOpen className={theme.text} size={20} />
-            Kế hoạch học tập tuần này
-          </h2>
-          <div className="flex items-center gap-4 mt-1">
-             <p className="text-sm text-gray-500">Danh sách bài tập và deadline</p>
-             <button 
-                onClick={() => setShowCompleted(!showCompleted)}
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all border
-                    ${showCompleted ? 'bg-gray-800 text-white border-gray-800' : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'}
-                `}
-             >
-                {showCompleted ? <Eye size={14} /> : <EyeOff size={14} />}
-                {showCompleted ? "Đang hiện việc đã xong" : "Đang ẩn việc đã xong"}
-             </button>
-          </div>
+    <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-5 sm:p-6 mb-8">
+      {/* Header Section */}
+      <div className="flex flex-col gap-4 mb-6">
+        <div className="flex items-center justify-between">
+            <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <BookOpen className={theme.text} size={24} />
+                <span>Tuần này</span>
+            </h2>
+            <span className="px-3 py-1 bg-gray-50 rounded-full text-xs font-bold text-gray-500 border border-gray-100">
+                {rangeLabel}
+            </span>
         </div>
 
         {/* Progress Bar */}
-        <div className="w-full md:w-64">
-          <div className="flex justify-between text-xs font-medium text-gray-600 mb-1">
-            <span>Tiến độ hoàn thành</span>
-            <span>{progress}% ({completedCount}/{totalTasks})</span>
+        <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
+          <div className="flex justify-between text-xs font-bold text-gray-500 mb-2 uppercase tracking-wide">
+            <span>Tiến độ</span>
+            <span>{Math.round(progress)}%</span>
           </div>
-          <div className="w-full bg-gray-100 rounded-full h-2.5">
+          <div className="w-full bg-gray-200 rounded-full h-3 mb-1">
             <div 
-              className={`${theme.bg} h-2.5 rounded-full transition-all duration-500 ease-out`}
+              className={`${theme.bg} h-3 rounded-full transition-all duration-500 ease-out shadow-sm`}
               style={{ width: `${progress}%` }}
             ></div>
+          </div>
+          <div className="flex justify-end">
+             <span className="text-[10px] text-gray-400 font-medium">
+                {completedCount} / {totalTasks} hoàn thành
+             </span>
           </div>
         </div>
       </div>
 
-      {/* Task List Grouped by Date */}
       <div className="space-y-8">
         {displayList.length === 0 ? (
-          <div className="text-center py-12 text-gray-400 bg-gray-50 rounded-lg border border-dashed flex flex-col items-center">
-            <CheckCircle2 size={40} className="mb-3 opacity-20" />
-            <p className="font-medium">Chưa có nhiệm vụ nào cần hoàn thành.</p>
-            {!showCompleted && completedCount > 0 && (
-                <button 
-                    onClick={() => setShowCompleted(true)}
-                    className="mt-3 text-blue-600 text-xs font-bold hover:underline"
-                >
-                    Xem {completedCount} nhiệm vụ đã xong
-                </button>
-            )}
+          <div className="py-12 text-center bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+            <div className="bg-white w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm">
+                <CheckCircle2 size={32} className="text-gray-300" />
+            </div>
+            <h3 className="text-gray-900 font-bold mb-1">Thảnh thơi!</h3>
+            <p className="text-gray-400 text-xs">Không có bài tập nào.</p>
           </div>
         ) : (
           sortedDateKeys.map(dateKey => {
             const tasks = groupedTasks[dateKey];
-            const firstTask = tasks[0];
-            const styles = getDayStyles(firstTask.timestart);
+            const isToday = formatDate(Date.now() / 1000) === dateKey;
 
             return (
                 <div key={dateKey} className="relative">
-                    {/* Date Header */}
-                    <div className={`flex items-center gap-2 mb-3 font-bold text-sm uppercase tracking-wide ${styles.text}`}>
-                        <Calendar size={16} />
-                        {dateKey}
+                    <div className={`sticky top-14 sm:top-0 z-10 flex items-center gap-3 mb-3 py-2 bg-white/95 backdrop-blur-sm
+                        ${isToday ? theme.text : 'text-gray-500'}
+                    `}>
+                        <Calendar size={18} />
+                        <span className="font-bold text-base uppercase tracking-tight">{dateKey}</span>
+                        {isToday && <span className={`text-[9px] px-2 py-0.5 rounded-full bg-red-100 text-red-600 font-bold uppercase`}>Hôm nay</span>}
                     </div>
 
-                    {/* Tasks Container */}
-                    <div className="flex flex-col gap-3">
+                    <div className="grid grid-cols-1 gap-3">
                         {tasks.map(task => {
                             const isCompleted = completedEvents.has(task.id);
                             const isUrgent = !isCompleted && (task.timestart * 1000 - Date.now() < 86400000 * 2);
                             const hasAlarm = alarms[task.id] !== undefined;
+                            const style = getEventStyle(task);
+                            const shortDesc = task.description ? cleanHtml(task.description).slice(0, 100) + (task.description.length > 100 ? '...' : '') : '';
 
                             return (
                                 <div 
                                     key={task.id} 
-                                    className={`relative flex items-start gap-3 p-4 rounded-xl border-l-[6px] transition-all cursor-pointer group
+                                    className={`relative flex flex-col p-4 sm:p-5 rounded-3xl border transition-all cursor-pointer group
                                     ${isCompleted 
-                                        ? 'bg-gray-50 border-gray-200 opacity-60' 
-                                        : `${styles.bg} ${styles.border} hover:shadow-md`
+                                        ? 'bg-gray-50 border-gray-100 opacity-60' 
+                                        : `bg-white border-gray-200 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.05)] hover:shadow-lg hover:border-${theme.text.split('-')[1]}-200`
                                     }`}
                                     onClick={() => onEventClick && onEventClick(task)}
                                 >
-                                    <button 
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            onToggleComplete(task.id);
-                                        }}
-                                        className={`mt-0.5 flex-shrink-0 transition-colors ${
-                                            isCompleted ? 'text-green-500' : 'text-gray-400 hover:text-green-500'
-                                        }`}
-                                    >
-                                        {isCompleted ? <CheckCircle2 size={22} /> : <Circle size={22} />}
-                                    </button>
-
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center justify-between gap-2 mb-1">
-                                            <p className={`text-[10px] font-bold uppercase tracking-wider truncate ${styles.text} opacity-80`}>
-                                                {task.course.shortname || task.course.fullname}
-                                            </p>
-                                            <div className="flex gap-1">
-                                                {hasAlarm && !isCompleted && (
-                                                    <span className="flex-shrink-0 text-orange-500">
-                                                        <BellRing size={14} />
+                                    <div className="flex gap-4">
+                                        <div className="flex-1 min-w-0">
+                                            {/* Top Badges */}
+                                            <div className="flex flex-wrap items-center gap-2 mb-2">
+                                                <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${isCompleted ? 'bg-gray-100 text-gray-500' : style.badge}`}>
+                                                    {task.modulename}
+                                                </span>
+                                                {isUrgent && (
+                                                    <span className="px-2 py-0.5 bg-red-50 text-red-600 text-[10px] font-bold rounded-md flex items-center gap-1">
+                                                        <AlertTriangle size={10} /> Gấp
                                                     </span>
                                                 )}
-                                                {isUrgent && (
-                                                <span className="flex-shrink-0 flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full whitespace-nowrap">
-                                                    <AlertTriangle size={10} /> Gấp
-                                                </span>
+                                                {hasAlarm && !isCompleted && (
+                                                    <span className="text-orange-500"><BellRing size={12} /></span>
                                                 )}
                                             </div>
-                                        </div>
 
-                                        <p className={`text-sm font-bold leading-tight mb-2 ${isCompleted ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
-                                            {task.activityname}
-                                        </p>
+                                            {/* Main Content */}
+                                            <h3 className={`text-base sm:text-lg font-bold leading-snug mb-1 ${isCompleted ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
+                                                {task.activityname}
+                                            </h3>
+                                            <p className={`text-xs sm:text-sm font-semibold mb-2 ${isCompleted ? 'text-gray-400' : style.subText}`}>
+                                                {task.course.fullname}
+                                            </p>
 
-                                        <div className="flex items-center gap-2">
-                                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
-                                            task.modulename === 'quiz' ? 'bg-white text-red-600 border border-red-100' : 
-                                            task.modulename === 'assign' ? 'bg-white text-blue-600 border border-blue-100' :
-                                            'bg-white text-purple-600 border border-purple-100'
-                                            }`}>
-                                                {task.modulename}
-                                            </span>
-                                            {task.formattedtime && (
-                                                <span className="text-xs text-gray-500 font-medium bg-white/50 px-1.5 py-0.5 rounded">
-                                                    {cleanHtml(task.formattedtime)}
-                                                </span>
+                                            {/* Info Row */}
+                                            <div className="flex items-center gap-4 text-xs text-gray-500">
+                                                {task.formattedtime && (
+                                                    <span className="flex items-center gap-1 bg-gray-50 px-2 py-1 rounded-lg">
+                                                        <span className="opacity-50">🕒</span> {cleanHtml(task.formattedtime)}
+                                                    </span>
+                                                )}
+                                                {task.location && (
+                                                     <span className="flex items-center gap-1 bg-gray-50 px-2 py-1 rounded-lg">
+                                                        <MapPin size={12} className="opacity-50" /> {task.location}
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            {/* Desc Preview */}
+                                            {shortDesc && !isCompleted && (
+                                                <div className="mt-3 flex gap-2">
+                                                    <AlignLeft size={12} className="mt-0.5 opacity-30 shrink-0" />
+                                                    <p className="text-[11px] text-gray-400 italic leading-relaxed line-clamp-2">
+                                                        {shortDesc}
+                                                    </p>
+                                                </div>
                                             )}
                                         </div>
+
+                                        {/* Checkbox (Right aligned) */}
+                                        <button 
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onToggleComplete(task.id);
+                                            }}
+                                            className={`flex-shrink-0 self-start mt-1 p-1 rounded-full transition-all active:scale-90 ${
+                                                isCompleted ? 'text-green-500' : 'text-gray-300 hover:text-gray-400'
+                                            }`}
+                                        >
+                                            {isCompleted ? <CheckCircle2 size={28} className="fill-green-50" /> : <Circle size={28} />}
+                                        </button>
                                     </div>
+                                    
+                                    {/* Left Status Bar indicator instead of full border */}
+                                    {!isCompleted && (
+                                        <div className={`absolute top-4 bottom-4 left-0 w-1 rounded-r-full ${style.bg.replace('bg-', 'bg-').replace('50', '400')}`}></div>
+                                    )}
                                 </div>
                             );
                         })}

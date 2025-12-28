@@ -41,47 +41,107 @@ export const isVideoConference = (event: CalendarEvent): boolean => {
   
   return type === 'videoconference' || 
          name.includes('video conference') || 
-         activity.includes('video conference') ||
-         name.includes('google meet') ||
+         activity.includes('video conference') || 
+         name.includes('google meet') || 
          name.includes('zoom');
 };
 
 /**
- * Check if event should be hidden (e.g., "Gia hạn" quizzes)
+ * Check if event should be hidden
+ * Đã bỏ lọc "Gia hạn" để hiển thị hết các bài cũ
  */
 export const shouldHideEvent = (event: CalendarEvent): boolean => {
-  // Ẩn bài kiểm tra (quiz) có chữ "gia hạn" (case insensitive)
-  if (event.modulename === 'quiz' && event.activityname.toLowerCase().includes('gia hạn')) {
-    return true;
-  }
+  // Logic cũ: Ẩn bài kiểm tra (quiz) có chữ "gia hạn"
+  // if (event.modulename === 'quiz' && event.activityname.toLowerCase().includes('gia hạn')) {
+  //   return true;
+  // }
   return false;
 };
 
 /**
- * Returns color classes based on the activity module name and importance
+ * Returns detailed style object based on event type
  */
-export const getEventColor = (event: CalendarEvent): string => {
+export const getEventStyle = (event: CalendarEvent) => {
   if (event.isPersonal) {
-    return 'bg-purple-50 text-purple-700 border-purple-200';
+    return {
+      bg: 'bg-fuchsia-50',
+      border: 'border-fuchsia-200',
+      text: 'text-fuchsia-900',
+      subText: 'text-fuchsia-600',
+      iconBg: 'bg-fuchsia-100',
+      iconText: 'text-fuchsia-600',
+      badge: 'bg-fuchsia-100 text-fuchsia-700',
+      dot: 'bg-fuchsia-400'
+    };
   }
 
-  // Special highlighting for Video Conferences
   if (isVideoConference(event)) {
-    return 'bg-amber-100 text-amber-900 border-amber-400 ring-1 ring-amber-400 font-semibold shadow-sm';
+    return {
+      bg: 'bg-amber-50',
+      border: 'border-amber-200',
+      text: 'text-amber-900',
+      subText: 'text-amber-700',
+      iconBg: 'bg-amber-100',
+      iconText: 'text-amber-600',
+      badge: 'bg-amber-100 text-amber-800',
+      dot: 'bg-amber-500'
+    };
   }
 
   switch (event.modulename) {
     case 'quiz':
-      return 'bg-red-50 text-red-700 border-red-200';
+      return {
+        bg: 'bg-rose-50',
+        border: 'border-rose-200',
+        text: 'text-rose-900',
+        subText: 'text-rose-700',
+        iconBg: 'bg-rose-100',
+        iconText: 'text-rose-600',
+        badge: 'bg-rose-100 text-rose-700',
+        dot: 'bg-rose-500'
+      };
     case 'assign':
-      return 'bg-blue-50 text-blue-700 border-blue-200';
+      return {
+        bg: 'bg-blue-50',
+        border: 'border-blue-200',
+        text: 'text-blue-900',
+        subText: 'text-blue-700',
+        iconBg: 'bg-blue-100',
+        iconText: 'text-blue-600',
+        badge: 'bg-blue-100 text-blue-700',
+        dot: 'bg-blue-500'
+      };
     case 'forum':
-      return 'bg-green-50 text-green-700 border-green-200';
-    case 'personal':
-      return 'bg-purple-50 text-purple-700 border-purple-200';
+      return {
+        bg: 'bg-emerald-50',
+        border: 'border-emerald-200',
+        text: 'text-emerald-900',
+        subText: 'text-emerald-700',
+        iconBg: 'bg-emerald-100',
+        iconText: 'text-emerald-600',
+        badge: 'bg-emerald-100 text-emerald-700',
+        dot: 'bg-emerald-500'
+      };
     default:
-      return 'bg-gray-50 text-gray-700 border-gray-200';
+      return {
+        bg: 'bg-slate-50',
+        border: 'border-slate-200',
+        text: 'text-slate-900',
+        subText: 'text-slate-600',
+        iconBg: 'bg-slate-100',
+        iconText: 'text-slate-500',
+        badge: 'bg-slate-100 text-slate-600',
+        dot: 'bg-slate-400'
+      };
   }
+};
+
+/**
+ * Returns color classes based on the activity module name and importance (Legacy support)
+ */
+export const getEventColor = (event: CalendarEvent): string => {
+  const style = getEventStyle(event);
+  return `${style.bg} ${style.text} ${style.border}`;
 };
 
 export const getEventIconColor = (modulename: string): string => {
@@ -110,6 +170,21 @@ export const filterEventsByCourse = (events: CalendarEvent[], courseId: string):
  */
 export const getThemeColors = (theme: ThemeColor) => {
   switch (theme) {
+    case 'luxury':
+      return {
+        bg: 'bg-slate-900',
+        bgHover: 'hover:bg-black',
+        bgLight: 'bg-slate-50',
+        bgMedium: 'bg-slate-100',
+        text: 'text-slate-800',
+        textDark: 'text-slate-900',
+        textLight: 'text-slate-500',
+        border: 'border-slate-200',
+        borderHover: 'hover:border-slate-400',
+        ring: 'ring-slate-800',
+        shadow: 'shadow-slate-300',
+        activeItem: 'bg-slate-900 text-amber-100' // Dark luxury with Gold text
+      };
     case 'rose':
       return {
         bg: 'bg-rose-500',

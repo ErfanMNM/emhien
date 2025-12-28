@@ -82,16 +82,24 @@ const persist = () => {
 };
 
 /**
+ * Lấy dữ liệu nhị phân của DB (Uint8Array)
+ */
+export const getDBBinary = (): Uint8Array | null => {
+    if (!db) return null;
+    return db.export();
+};
+
+/**
  * Xuất Database dưới dạng File Blob để tải về
  */
 export const exportDBFile = (): Blob | null => {
-    if (!db) return null;
-    const data = db.export();
+    const data = getDBBinary();
+    if (!data) return null;
     return new Blob([data], { type: 'application/x-sqlite3' });
 };
 
 /**
- * Nhập dữ liệu từ file SQLite bên ngoài
+ * Nhập dữ liệu từ file SQLite bên ngoài (ArrayBuffer)
  */
 export const importDBFile = async (arrayBuffer: ArrayBuffer): Promise<boolean> => {
     try {

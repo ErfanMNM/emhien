@@ -92,5 +92,5 @@ export interface ScheduleMetadata {
   months?: string[]; // Danh sách các tháng đã nạp
 }
 
-export type ThemeColor = 'blue' | 'rose' | 'emerald' | 'violet';
+export type ThemeColor = 'blue' | 'rose' | 'emerald' | 'violet' | 'luxury';
 export type AppView = 'weekly' | 'calendar' | 'list' | 'uikit';

@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { CalendarData, CalendarEvent, CalendarDay, ThemeColor } from '../types';
-import { getEventColor, isVideoConference, shouldHideEvent, formatDate, getThemeColors, cleanHtml } from '../utils';
-import { Video, BellRing, ChevronRight, Calendar as CalendarIcon, Clock, ChevronLeft, ChevronRight as ChevronRightIcon } from 'lucide-react';
+import { getEventStyle, isVideoConference, shouldHideEvent, formatDate, getThemeColors, cleanHtml } from '../utils';
+import { Video, ChevronRight, Calendar as CalendarIcon, ChevronLeft, ChevronRight as ChevronRightIcon, Clock, MapPin, CheckCircle2 } from 'lucide-react';
 
 interface CalendarViewProps {
   periods: Record<string, CalendarData>;
@@ -128,11 +128,30 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                                 <div className="mb-1 mt-1">
                                     <span className={`text-xs sm:text-sm font-medium w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-full ${day.istoday ? `${theme.bg} text-white` : isSelected ? `${theme.bgMedium} ${theme.textDark} font-bold` : 'text-gray-700'}`}>{day.mday}</span>
                                 </div>
-                                <div className="sm:hidden flex flex-col gap-0.5 w-full items-center">
-                                    {displayEvents.slice(0, 2).map((e) => (<div key={e.id} className="w-1.5 h-1.5 rounded-full bg-blue-400"></div>))}
+                                {/* Mobile View: Colored Dots */}
+                                <div className="sm:hidden flex gap-1 w-full justify-center flex-wrap px-1">
+                                    {displayEvents.slice(0, 3).map((e) => {
+                                        const style = getEventStyle(e);
+                                        return (
+                                            <div key={e.id} className={`w-1.5 h-1.5 rounded-full ${style.dot}`}></div>
+                                        );
+                                    })}
+                                    {displayEvents.length > 3 && <div className="w-1.5 h-1.5 rounded-full bg-gray-300"></div>}
                                 </div>
+                                {/* Desktop View: Colored Bars */}
                                 <div className="hidden sm:flex flex-col gap-1 w-full px-1">
-                                    {displayEvents.slice(0, 2).map((e) => (<div key={e.id} className="text-[8px] sm:text-[10px] px-1 py-0.5 rounded bg-gray-100 truncate text-gray-600 font-medium">{e.activityname}</div>))}
+                                    {displayEvents.slice(0, 2).map((e) => {
+                                        const style = getEventStyle(e);
+                                        const isCompleted = completedEvents.has(e.id);
+                                        return (
+                                            <div key={e.id} className={`text-[9px] px-1.5 py-0.5 rounded truncate font-semibold border border-transparent ${isCompleted ? 'bg-gray-100 text-gray-400 line-through' : `${style.bg} ${style.subText}`}`}>
+                                                {e.activityname}
+                                            </div>
+                                        );
+                                    })}
+                                    {displayEvents.length > 2 && (
+                                        <div className="text-[9px] text-center text-gray-400 font-medium">+{displayEvents.length - 2} khác</div>
+                                    )}
                                 </div>
                             </div>
                         );
@@ -148,22 +167,71 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                 <CalendarIcon className={theme.text} size={20} />
                 <h3 className="font-bold text-gray-800 text-lg">{selectedTimestamp ? `Sự kiện ngày ${formatDate(selectedTimestamp)}` : 'Chọn một ngày'}</h3>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {selectedEvents.length === 0 ? (
-                    <div className="col-span-full py-10 text-center bg-white rounded-3xl border border-gray-100 text-gray-400 shadow-sm"><p>Trống trong ngày này.</p></div>
+                    <div className="col-span-full py-12 text-center bg-white rounded-3xl border border-gray-100 text-gray-400 shadow-sm flex flex-col items-center">
+                         <CalendarIcon size={32} className="mb-2 opacity-20" />
+                         <p>Không có sự kiện nào trong ngày này.</p>
+                    </div>
                 ) : (
-                    selectedEvents.map(event => (
-                        <div key={event.id} onClick={() => onEventClick(event)} className={`relative flex items-center p-4 rounded-3xl transition-all cursor-pointer bg-white group hover:shadow-md border border-transparent ${completedEvents.has(event.id) ? 'opacity-60' : ''}`}>
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center mr-3 flex-shrink-0 bg-gray-100`}>
-                                {isVideoConference(event) ? <Video size={18} /> : <img src={event.icon.iconurl} alt="" className="w-5 h-5 object-contain" />}
+                    selectedEvents.map(event => {
+                        const style = getEventStyle(event);
+                        const isCompleted = completedEvents.has(event.id);
+                        return (
+                            <div 
+                                key={event.id} 
+                                onClick={() => onEventClick(event)} 
+                                className={`relative flex flex-col sm:flex-row items-start p-5 rounded-3xl transition-all cursor-pointer bg-white group shadow-sm hover:shadow-md border border-transparent
+                                    ${isCompleted 
+                                        ? 'opacity-60 grayscale' 
+                                        : `border-l-8 ${style.border.replace('border', 'border-l')}`
+                                    }
+                                `}
+                            >
+                                <div className="flex w-full gap-4">
+                                     <div className={`hidden sm:flex w-12 h-12 rounded-2xl items-center justify-center flex-shrink-0 ${isCompleted ? 'bg-gray-100' : style.iconBg} ${style.iconText}`}>
+                                        {isVideoConference(event) ? <Video size={20} /> : <img src={event.icon.iconurl} alt="" className="w-6 h-6 object-contain" />}
+                                    </div>
+                                    
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between gap-2 mb-1">
+                                            <span className={`text-[10px] font-bold uppercase tracking-wider rounded px-1.5 py-0.5 ${isCompleted ? 'bg-gray-100 text-gray-500' : style.badge}`}>
+                                                {event.modulename}
+                                            </span>
+                                            {isCompleted && <CheckCircle2 size={16} className="text-green-500" />}
+                                        </div>
+
+                                        <h4 className={`text-base font-bold leading-snug mb-1 ${isCompleted ? 'line-through text-gray-500' : 'text-gray-900'}`}>
+                                            {event.activityname}
+                                        </h4>
+                                        <p className={`text-sm font-medium mb-3 ${style.subText}`}>
+                                            {event.course.fullname}
+                                        </p>
+
+                                        <div className="flex flex-col gap-1 text-xs text-gray-500">
+                                            {event.formattedtime && (
+                                                <div className="flex items-center gap-1.5">
+                                                    <Clock size={14} className="text-gray-400" />
+                                                    <span>{cleanHtml(event.formattedtime)}</span>
+                                                </div>
+                                            )}
+                                            {event.location && (
+                                                <div className="flex items-center gap-1.5">
+                                                    <MapPin size={14} className="text-gray-400" />
+                                                    <span>{event.location}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="self-center">
+                                         <ChevronRight size={20} className="text-gray-300 group-hover:text-gray-500 transition-colors" />
+                                    </div>
+                                </div>
                             </div>
-                            <div className="flex-1 min-w-0">
-                                <h4 className={`text-sm font-bold text-gray-900 truncate ${completedEvents.has(event.id) ? 'line-through' : ''}`}>{event.activityname}</h4>
-                                <p className="text-[10px] text-gray-500 truncate mt-0.5">{cleanHtml(event.formattedtime)}</p>
-                            </div>
-                            <ChevronRight size={16} className="text-gray-300" />
-                        </div>
-                    ))
+                        );
+                    })
                 )}
             </div>
         </div>
