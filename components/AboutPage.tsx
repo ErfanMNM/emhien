@@ -107,7 +107,7 @@ const AboutPage: React.FC<AboutPageProps> = ({ onBack, themeColor }) => {
           <div className="space-y-3 text-sm">
             <div className="flex justify-between items-center py-2 border-b border-blue-100">
               <span className="text-gray-600 font-medium">Phiên bản:</span>
-              <span className="font-bold text-gray-800">1.0.0 - Siêu Vip</span>
+              <span className="font-bold text-gray-800">1.0.2 - Siêu Vip</span>
             </div>
             <div className="flex justify-between items-center py-2 border-b border-blue-100">
               <span className="text-gray-600 font-medium">Ngày phát hành:</span>
