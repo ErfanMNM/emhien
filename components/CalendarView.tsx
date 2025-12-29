@@ -163,19 +163,10 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                                 <div className="mb-1 mt-1">
                                     <span className={`text-xs sm:text-sm font-medium w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-full ${day.istoday ? `${theme.bg} text-white` : isSelected ? `${theme.bgMedium} ${theme.textDark} font-bold` : 'text-gray-700'}`}>{day.mday}</span>
                                 </div>
-                                {/* Hiển thị ngày âm lịch và indicator tốt/xấu */}
-                                {lunarInfo && (
-                                  <div className="flex flex-col items-center gap-0.5 mb-0.5">
-                                    {lunarInfo.lunarDate && (
-                                      <div className="text-[8px] sm:text-[9px] text-gray-500 font-medium">
-                                        {lunarInfo.lunarDate.split('-')[0]}/{lunarInfo.lunarDate.split('-')[1]}
-                                      </div>
-                                    )}
-                                    {lunarInfo.isGoodDay !== null && (
-                                      <div className={`w-1.5 h-1.5 rounded-full ${
-                                        lunarInfo.isGoodDay ? 'bg-green-400' : 'bg-purple-400'
-                                      }`} title={lunarInfo.isGoodDay ? 'Ngày tốt' : 'Ngày xấu'}></div>
-                                    )}
+                                {/* Hiển thị ngày âm lịch */}
+                                {lunarInfo && lunarInfo.lunarDate && (
+                                  <div className="text-[8px] sm:text-[9px] text-gray-500 font-medium mb-0.5">
+                                    {lunarInfo.lunarDate.split('-')[0]}/{lunarInfo.lunarDate.split('-')[1]}
                                   </div>
                                 )}
                                 {/* Mobile View: Colored Dots */}
@@ -217,6 +208,45 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                 <CalendarIcon className={theme.text} size={20} />
                 <h3 className="font-bold text-gray-800 text-lg">{selectedTimestamp ? `Sự kiện ngày ${formatDate(selectedTimestamp)}` : 'Chọn một ngày'}</h3>
             </div>
+            
+            {/* Thông tin lịch âm */}
+            {selectedTimestamp && lunarInfoMap.has(selectedTimestamp) && (() => {
+                const lunarInfo = lunarInfoMap.get(selectedTimestamp);
+                if (!lunarInfo) return null;
+                
+                return (
+                    <div className={`mb-4 p-4 rounded-2xl border-2 ${
+                        lunarInfo.isGoodDay === true 
+                            ? 'bg-green-50 border-green-200' 
+                            : lunarInfo.isGoodDay === false 
+                            ? 'bg-purple-50 border-purple-200' 
+                            : 'bg-gray-50 border-gray-200'
+                    }`}>
+                        <div className="flex items-center gap-2 mb-2">
+                            <CalendarIcon className={lunarInfo.isGoodDay === true ? 'text-green-600' : lunarInfo.isGoodDay === false ? 'text-purple-600' : 'text-gray-500'} size={18} />
+                            <h4 className="font-bold text-gray-800 text-sm">Thông tin lịch âm</h4>
+                        </div>
+                        <div className="space-y-1.5 text-sm">
+                            {lunarInfo.lunarDate && (
+                                <div className="flex items-center gap-2">
+                                    <span className="text-gray-600 font-medium">Ngày âm lịch:</span>
+                                    <span className="text-gray-800 font-bold">{lunarInfo.lunarDate}</span>
+                                </div>
+                            )}
+                            {lunarInfo.isGoodDay !== null && (
+                                <div className="flex items-center gap-2">
+                                    <span className="text-gray-600 font-medium">Đánh giá:</span>
+                                    <span className={`font-bold ${
+                                        lunarInfo.isGoodDay ? 'text-green-600' : 'text-purple-600'
+                                    }`}>
+                                        {lunarInfo.isGoodDay ? '✓ Ngày tốt' : '✗ Ngày xấu'}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                );
+            })()}
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {selectedEvents.length === 0 ? (
