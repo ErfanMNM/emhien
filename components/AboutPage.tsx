@@ -50,7 +50,7 @@ const AboutPage: React.FC<AboutPageProps> = ({ onBack, themeColor }) => {
               </span>
             </div>
             
-            <p className="text-gray-600 text-lg font-medium mb-2">Phiên bản 1.0.19</p>
+            <p className="text-gray-600 text-lg font-medium mb-2">Phiên bản 1.0.29</p>
             <p className="text-gray-500 text-sm">Quản lý lịch học và bài tập cá nhân hóa dành cho bé Hiền đáng yêu</p>
           </div>
         </div>
@@ -107,7 +107,7 @@ const AboutPage: React.FC<AboutPageProps> = ({ onBack, themeColor }) => {
           <div className="space-y-3 text-sm">
             <div className="flex justify-between items-center py-2 border-b border-blue-100">
               <span className="text-gray-600 font-medium">Phiên bản:</span>
-              <span className="font-bold text-gray-800">1.0.19 - Siêu Vip</span>
+              <span className="font-bold text-gray-800">1.0.29 - Siêu Vip</span>
             </div>
             <div className="flex justify-between items-center py-2 border-b border-blue-100">
               <span className="text-gray-600 font-medium">Ngày phát hành:</span>
