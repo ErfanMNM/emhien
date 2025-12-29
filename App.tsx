@@ -56,7 +56,9 @@ const App: React.FC = () => {
 
   // Check if app is already installed
   useEffect(() => {
-    if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone) {
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
+    console.log('[PWA] Is installed check:', isStandalone);
+    if (isStandalone) {
       setIsInstalled(true);
     }
   }, []);
@@ -74,10 +76,12 @@ const App: React.FC = () => {
     // PWA Install Prompt
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
+      console.log('[PWA] beforeinstallprompt event captured');
       setInstallPrompt(e as BeforeInstallPromptEvent);
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    console.log('[PWA] Install prompt listener registered');
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     
@@ -364,6 +368,17 @@ const App: React.FC = () => {
                         <button onClick={() => setView('list')} disabled={!multiMonthData} className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all flex items-center gap-2 ${view === 'list' ? `bg-white ${theme.textDark} shadow-sm` : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'}`}><ListIcon size={16} /> DS</button>
                     </div>
 
+                    {/* Install PWA Button in Header - Always visible if not installed */}
+                    {!isInstalled && (
+                      <button 
+                        onClick={handleInstallPWA}
+                        className="hidden lg:flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white text-xs font-bold rounded-full shadow-lg hover:shadow-xl transition-all hover:scale-105"
+                        title="Cài đặt App"
+                      >
+                        <Download size={16} />
+                        <span>Cài App</span>
+                      </button>
+                    )}
                     <button onClick={() => setIsSettingsOpen(true)} className={`hidden lg:block p-2.5 text-gray-500 ${theme.text} ${theme.bgLight} rounded-full transition-colors`}><Settings size={20} /></button>
                 </div>
             </div>

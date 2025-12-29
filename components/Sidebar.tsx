@@ -161,14 +161,15 @@ const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Footer Actions */}
         <div className="p-4 mb-2">
-            {/* Install PWA button - visible on all devices */}
-            {!isInstalled && installPrompt && onInstallPWA && (
+            {/* Install PWA button - visible on all devices if not installed */}
+            {!isInstalled && onInstallPWA && (
               <div className="bg-white rounded-2xl p-2 shadow-sm border border-gray-100 mb-4">
                 <button 
                   onClick={() => { onInstallPWA(); onClose(); }}
-                  className="w-full flex items-center gap-3 px-4 py-3 bg-blue-600 text-white hover:bg-blue-700 rounded-xl transition-colors font-bold text-sm shadow-sm"
+                  className="w-full flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800 rounded-xl transition-all font-bold text-sm shadow-lg"
                 >
                   <Download size={18} /> <span>Cài đặt App (Chạy Offline)</span>
+                  {installPrompt && <span className="ml-auto text-xs bg-white/20 px-2 py-0.5 rounded-full">Nhanh</span>}
                 </button>
               </div>
             )}
