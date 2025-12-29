@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Calendar as CalendarIcon, List as ListIcon, GraduationCap, Filter, Loader2, Settings, UploadCloud, Menu, Clock, Bell, Plus, Info, Eye, EyeOff, WifiOff, LogOut, User, LayoutTemplate } from 'lucide-react';
+import { Calendar as CalendarIcon, List as ListIcon, GraduationCap, Filter, Loader2, Settings, UploadCloud, Menu, Clock, Bell, Plus, Info, Eye, EyeOff, WifiOff, LogOut, User, LayoutTemplate, Download } from 'lucide-react';
 import CalendarView from './components/CalendarView';
 import ListView from './components/ListView';
 import WeeklySchedule from './components/WeeklySchedule';
@@ -13,7 +13,7 @@ import AuthPage from './components/AuthPage';
 import HeartsBackground from './components/HeartsBackground';
 import UIKit from './components/UIKit';
 import AlarmRingingModal from './components/AlarmRingingModal';
-import { CalendarEvent, Course, CalendarData, ScheduleMetadata, ThemeColor, AppView, MultiMonthData } from './types';
+import { CalendarEvent, Course, CalendarData, ScheduleMetadata, ThemeColor, AppView, MultiMonthData, BeforeInstallPromptEvent } from './types';
 import { filterEventsByCourse, shouldHideEvent, requestNotificationPermission, getThemeColors, sendNotification } from './utils';
 import { initDB, getSchedulesFromDB, getFullScheduleData, saveScheduleToDB, updateEventMetaInDB, deletePersonalEventFromDB, markEventAsNotified } from './lib/db';
 import { auth } from './lib/firebase';
@@ -50,6 +50,15 @@ const App: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isAddEventOpen, setIsAddEventOpen] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [isInstalled, setIsInstalled] = useState(false);
+
+  // Check if app is already installed
+  useEffect(() => {
+    if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone) {
+      setIsInstalled(true);
+    }
+  }, []);
 
   useEffect(() => {
     init();
@@ -60,12 +69,20 @@ const App: React.FC = () => {
     
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
-    
+
+    // PWA Install Prompt
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setInstallPrompt(e as BeforeInstallPromptEvent);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     
     return () => {
       unsubscribe();
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
@@ -260,6 +277,19 @@ const App: React.FC = () => {
       if (currentScheduleId) saveScheduleToDB(currentScheduleId, currentScheduleName, multiMonthData, nextPersonal);
   };
 
+  const handleInstallPWA = async () => {
+    if (!installPrompt) return;
+    
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    
+    if (outcome === 'accepted') {
+      setIsInstalled(true);
+    }
+    
+    setInstallPrompt(null);
+  };
+
   const filteredEvents = useMemo(() => filterEventsByCourse(allEvents, selectedCourse), [allEvents, selectedCourse]);
 
   const courses = useMemo(() => {
@@ -285,6 +315,9 @@ const App: React.FC = () => {
           onRequestNotification={requestNotificationPermission}
           onOpenUIKit={() => { setView('uikit'); setIsSidebarOpen(false); }}
           themeColor={themeColor}
+          installPrompt={installPrompt}
+          isInstalled={isInstalled}
+          onInstallPWA={handleInstallPWA}
       />
 
       {themeColor === 'rose' && <HeartsBackground />}

@@ -1,7 +1,7 @@
 
 import React from 'react';
-import { ScheduleMetadata, ThemeColor } from '../types';
-import { Plus, Calendar, X, GraduationCap, Settings, Bell, ChevronRight, Heart, LayoutTemplate } from 'lucide-react';
+import { ScheduleMetadata, ThemeColor, BeforeInstallPromptEvent } from '../types';
+import { Plus, Calendar, X, GraduationCap, Settings, Bell, ChevronRight, Heart, LayoutTemplate, Download } from 'lucide-react';
 import { getThemeColors } from '../utils';
 
 interface SidebarProps {
@@ -15,6 +15,9 @@ interface SidebarProps {
   onRequestNotification: () => Promise<boolean>; // Updated to return Promise
   onOpenUIKit?: () => void;
   themeColor: ThemeColor;
+  installPrompt?: BeforeInstallPromptEvent | null;
+  isInstalled?: boolean;
+  onInstallPWA?: () => void;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ 
@@ -27,7 +30,10 @@ const Sidebar: React.FC<SidebarProps> = ({
   onOpenSettings,
   onRequestNotification,
   onOpenUIKit,
-  themeColor
+  themeColor,
+  installPrompt,
+  isInstalled = false,
+  onInstallPWA
 }) => {
   
   const theme = getThemeColors(themeColor);
@@ -143,8 +149,20 @@ const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Footer Actions */}
         <div className="p-4 mb-2">
+            {/* Install PWA button - visible on all devices */}
+            {!isInstalled && installPrompt && onInstallPWA && (
+              <div className="bg-white rounded-2xl p-2 shadow-sm border border-gray-100 mb-4">
+                <button 
+                  onClick={() => { onInstallPWA(); onClose(); }}
+                  className="w-full flex items-center gap-3 px-4 py-3 bg-blue-600 text-white hover:bg-blue-700 rounded-xl transition-colors font-bold text-sm shadow-sm"
+                >
+                  <Download size={18} /> <span>Cài đặt App (Chạy Offline)</span>
+                </button>
+              </div>
+            )}
+            
             {/* Mobile-only buttons */}
-            <div className="bg-white rounded-2xl p-2 shadow-sm border border-gray-100 lg:hidden mb-4">
+            <div className="bg-white rounded-2xl p-2 shadow-sm border border-gray-100 lg:hidden mb-4 space-y-1">
                <button 
                   onClick={handleRequestNotification}
                   className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-xl transition-colors font-medium text-sm"

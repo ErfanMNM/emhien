@@ -94,3 +94,9 @@ export interface ScheduleMetadata {
 
 export type ThemeColor = 'blue' | 'rose' | 'emerald' | 'violet' | 'luxury';
 export type AppView = 'weekly' | 'calendar' | 'list' | 'uikit';
+
+// PWA Install Prompt Type
+export interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
