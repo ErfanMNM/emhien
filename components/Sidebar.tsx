@@ -19,6 +19,7 @@ interface SidebarProps {
   installPrompt?: BeforeInstallPromptEvent | null;
   isInstalled?: boolean;
   onInstallPWA?: () => void;
+  onShowSweetNotification?: () => void;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ 
@@ -35,7 +36,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   themeColor,
   installPrompt,
   isInstalled = false,
-  onInstallPWA
+  onInstallPWA,
+  onShowSweetNotification
 }) => {
   
   const theme = getThemeColors(themeColor);
@@ -176,6 +178,17 @@ const Sidebar: React.FC<SidebarProps> = ({
             
             {/* Quick actions */}
             <div className="bg-white rounded-2xl p-2 shadow-sm border border-gray-100 mb-4 space-y-1">
+               {onShowSweetNotification && (
+                 <button
+                    onClick={() => {
+                      onShowSweetNotification();
+                      onClose();
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-pink-500 to-rose-500 text-white hover:from-pink-600 hover:to-rose-600 rounded-xl transition-all font-bold text-sm shadow-lg"
+                 >
+                    <Heart size={18} className="fill-white" /> <span>💕 Tin nhắn ngọt ngào</span>
+                 </button>
+               )}
                <button
                   onClick={async () => {
                     await subscribeWebPushWithWorker();

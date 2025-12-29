@@ -14,6 +14,7 @@ import HeartsBackground from './components/HeartsBackground';
 import UIKit from './components/UIKit';
 import AlarmRingingModal from './components/AlarmRingingModal';
 import AboutPage from './components/AboutPage';
+import SweetNotificationModal from './components/SweetNotificationModal';
 import { CalendarEvent, Course, CalendarData, ScheduleMetadata, ThemeColor, AppView, MultiMonthData, BeforeInstallPromptEvent } from './types';
 import { filterEventsByCourse, shouldHideEvent, requestNotificationPermission, getThemeColors, sendNotification, syncAlarmsToWorker } from './utils';
 import { initDB, getSchedulesFromDB, getFullScheduleData, saveScheduleToDB, updateEventMetaInDB, deletePersonalEventFromDB, markEventAsNotified } from './lib/db';
@@ -54,10 +55,20 @@ const App: React.FC = () => {
   const [isAddEventOpen, setIsAddEventOpen] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
+  const [showSweetNotification, setShowSweetNotification] = useState(false);
 
   // Khởi tạo Firebase Cloud Messaging (lấy web push token) một lần
   useEffect(() => {
     initFCMMessaging();
+  }, []);
+
+  // Hiển thị thông báo ngọt ngào định kỳ (mỗi 2 giờ)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setShowSweetNotification(true);
+    }, 2 * 60 * 60 * 1000); // 2 giờ
+
+    return () => clearInterval(interval);
   }, []);
 
   // Check if app is already installed
@@ -108,6 +119,11 @@ const App: React.FC = () => {
         if (savedTheme) setThemeColor(savedTheme);
     }
     setIsLoadingDB(false);
+    
+    // Hiển thị thông báo ngọt ngào sau khi app load xong (đợi 2 giây)
+    setTimeout(() => {
+      setShowSweetNotification(true);
+    }, 2000);
   };
 
   const refreshSchedules = (isInitial: boolean = false) => {
@@ -421,6 +437,7 @@ const App: React.FC = () => {
           installPrompt={installPrompt}
           isInstalled={isInstalled}
           onInstallPWA={handleInstallPWA}
+          onShowSweetNotification={() => setShowSweetNotification(true)}
       />
 
       {themeColor === 'rose' && <HeartsBackground />}
@@ -569,6 +586,11 @@ const App: React.FC = () => {
             existingMonths={multiMonthData ? Object.keys(multiMonthData.periods) : []}
             onRefreshApp={() => refreshSchedules(true)}
             onOpenAuth={() => setShowAuth(true)}
+        />
+        
+        <SweetNotificationModal 
+            isOpen={showSweetNotification} 
+            onClose={() => setShowSweetNotification(false)} 
         />
       </div>
     </div>
