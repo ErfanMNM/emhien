@@ -2,7 +2,7 @@
 import React from 'react';
 import { ScheduleMetadata, ThemeColor, BeforeInstallPromptEvent } from '../types';
 import { Plus, Calendar, X, GraduationCap, Settings, Bell, ChevronRight, Heart, LayoutTemplate, Download, Info } from 'lucide-react';
-import { getThemeColors } from '../utils';
+import { getThemeColors, subscribeWebPushWithWorker } from '../utils';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -181,6 +181,15 @@ const Sidebar: React.FC<SidebarProps> = ({
                   className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-xl transition-colors font-medium text-sm"
                >
                   <Bell size={18} /> <span>Bật thông báo</span>
+               </button>
+               <button
+                  onClick={async () => {
+                    await subscribeWebPushWithWorker();
+                    onClose();
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-blue-700 hover:bg-blue-50 rounded-xl transition-colors font-medium text-sm"
+               >
+                  <Bell size={18} /> <span>Test thông báo từ Cloudflare Worker</span>
                </button>
                <button 
                   onClick={() => { onOpenSettings(); onClose(); }}

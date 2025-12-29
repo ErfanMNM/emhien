@@ -295,3 +295,67 @@ export const sendNotification = async (title: string, body: string, icon?: strin
     });
   }
 };
+
+/**
+ * Cloudflare Worker Web Push Helpers
+ * - Đăng ký subscription Web Push với VAPID public key
+ * - Gửi subscription lên endpoint /api/push/test trên Worker để test ngay
+ */
+const WORKER_VAPID_PUBLIC_KEY =
+  'BG_EgHJTWkd_VYz9Smnaxxk0RdEnOx36kvRPZ7x9jVM6XKxMkWVgYIcbU4j0HiO-X6xPbvlWXqxk8pU7MkHeyA4';
+
+const urlBase64ToUint8Array = (base64String: string): Uint8Array => {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+};
+
+export const subscribeWebPushWithWorker = async () => {
+  if (typeof window === 'undefined') return;
+
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    alert('Trình duyệt không hỗ trợ Web Push.');
+    return;
+  }
+
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') {
+    alert('Bạn cần cho phép quyền Thông báo để nhận Web Push.');
+    return;
+  }
+
+  const registration = await navigator.serviceWorker.ready;
+
+  const applicationServerKey = urlBase64ToUint8Array(WORKER_VAPID_PUBLIC_KEY);
+
+  const subscription = await registration.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey,
+  });
+
+  try {
+    const res = await fetch('/api/push/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        subscription,
+        title: 'Hiền Ham Học (Worker)',
+        body: 'Thông báo test từ Cloudflare Worker',
+      }),
+    });
+
+    if (!res.ok) {
+      throw new Error('Request failed');
+    }
+
+    alert('✅ Đã đăng ký Web Push với Cloudflare Worker.\nĐang gửi thông báo test...');
+  } catch (e) {
+    console.error(e);
+    alert('❌ Gửi thông báo test qua Cloudflare Worker thất bại.');
+  }
+};
