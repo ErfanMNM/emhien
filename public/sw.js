@@ -102,16 +102,28 @@ self.addEventListener('notificationclick', (event) => {
         return;
       }
       
+      // Nếu là alarm notification, hiển thị modal báo thức
+      const isAlarm = notificationData && notificationData.type === 'alarm';
+      
       // Focus existing window or open new one
       for (const client of clientList) {
         if (client.url && 'focus' in client) {
           return client.focus().then(() => {
             // Notify client about the notification click
             if (notificationData && notificationData.eventId) {
-              client.postMessage({
-                type: 'NOTIFICATION_CLICKED',
-                eventId: notificationData.eventId
-              });
+              if (isAlarm) {
+                // Gửi message để hiển thị modal báo thức
+                client.postMessage({
+                  type: 'NOTIFICATION_CLICKED',
+                  eventId: notificationData.eventId,
+                  showAlarmModal: true
+                });
+              } else {
+                client.postMessage({
+                  type: 'NOTIFICATION_CLICKED',
+                  eventId: notificationData.eventId
+                });
+              }
             }
           });
         }
@@ -120,10 +132,21 @@ self.addEventListener('notificationclick', (event) => {
       if (clients.openWindow) {
         return clients.openWindow('/').then((client) => {
           if (client && notificationData && notificationData.eventId) {
-            client.postMessage({
-              type: 'NOTIFICATION_CLICKED',
-              eventId: notificationData.eventId
-            });
+            // Đợi một chút để app load xong rồi mới gửi message
+            setTimeout(() => {
+              if (isAlarm) {
+                client.postMessage({
+                  type: 'NOTIFICATION_CLICKED',
+                  eventId: notificationData.eventId,
+                  showAlarmModal: true
+                });
+              } else {
+                client.postMessage({
+                  type: 'NOTIFICATION_CLICKED',
+                  eventId: notificationData.eventId
+                });
+              }
+            }, 1000);
           }
         });
       }
@@ -241,6 +264,7 @@ function triggerBackgroundNotification(event, alarmMins) {
   
   const icon = event.icon?.iconurl || '/icon-192.png';
   
+  // Gửi notification
   self.registration.showNotification(title, {
     body,
     icon,
@@ -250,6 +274,7 @@ function triggerBackgroundNotification(event, alarmMins) {
     tag: `alarm-${event.id}`,
     data: {
       eventId: event.id,
+      type: 'alarm',
       url: '/'
     },
     actions: [
@@ -262,6 +287,16 @@ function triggerBackgroundNotification(event, alarmMins) {
         title: 'Đóng'
       }
     ]
+  });
+  
+  // Nếu app đang mở, gửi message để hiển thị modal báo thức
+  self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
+    clients.forEach(client => {
+      client.postMessage({
+        type: 'ALARM_TRIGGERED',
+        eventId: event.id
+      });
+    });
   });
   
   console.log('[SW] Background notification triggered:', title, body);
@@ -307,15 +342,33 @@ self.addEventListener('push', (event) => {
     '/icon-192.png';
 
   const notificationData = anyData.data || {};
+  
+  // Nếu có eventId trong data, đánh dấu là alarm notification
+  if (notificationData.eventId) {
+    notificationData.type = 'alarm';
+  }
 
   event.waitUntil(
-    self.registration.showNotification(title, {
-      body,
-      icon,
-      badge: '/icon-192.png',
-      data: notificationData,
-      tag: anyData.tag || 'hien-ham-hoc',
-      requireInteraction: true,
-    })
+    Promise.all([
+      // Hiển thị notification
+      self.registration.showNotification(title, {
+        body,
+        icon,
+        badge: '/icon-192.png',
+        data: notificationData,
+        tag: anyData.tag || 'hien-ham-hoc',
+        requireInteraction: true,
+        vibrate: [200, 100, 200, 100, 200],
+      }),
+      // Nếu app đang mở và là alarm notification, gửi message để hiển thị modal
+      notificationData.eventId ? self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
+        clients.forEach(client => {
+          client.postMessage({
+            type: 'ALARM_TRIGGERED',
+            eventId: notificationData.eventId
+          });
+        });
+      }) : Promise.resolve()
+    ])
   );
 });

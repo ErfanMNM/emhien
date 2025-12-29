@@ -266,12 +266,18 @@ const App: React.FC = () => {
           }
         }
         
-        // Handle notification click
+        // Handle notification click - hiển thị modal báo thức
         if (messageEvent.data && messageEvent.data.type === 'NOTIFICATION_CLICKED') {
           const eventId = messageEvent.data.eventId;
           const clickedEvent = allEvents.find(e => e.id === eventId);
           if (clickedEvent) {
-            setSelectedEvent(clickedEvent);
+            // Nếu có flag showAlarmModal, hiển thị modal báo thức
+            if (messageEvent.data.showAlarmModal) {
+              setRingingEvent(clickedEvent);
+            } else {
+              // Nếu không, mở event detail
+              setSelectedEvent(clickedEvent);
+            }
           }
         }
         
