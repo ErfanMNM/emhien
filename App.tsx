@@ -18,6 +18,7 @@ import { CalendarEvent, Course, CalendarData, ScheduleMetadata, ThemeColor, AppV
 import { filterEventsByCourse, shouldHideEvent, requestNotificationPermission, getThemeColors, sendNotification } from './utils';
 import { initDB, getSchedulesFromDB, getFullScheduleData, saveScheduleToDB, updateEventMetaInDB, deletePersonalEventFromDB, markEventAsNotified } from './lib/db';
 import { auth } from './lib/firebase';
+import { initFCMMessaging } from './lib/messaging';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 
 const LS_KEY_THEME = 'lms_theme_color';
@@ -53,6 +54,11 @@ const App: React.FC = () => {
   const [isAddEventOpen, setIsAddEventOpen] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
+
+  // Khởi tạo Firebase Cloud Messaging (lấy web push token) một lần
+  useEffect(() => {
+    initFCMMessaging();
+  }, []);
 
   // Check if app is already installed
   useEffect(() => {
@@ -385,7 +391,23 @@ const App: React.FC = () => {
           onSelectSchedule={handleLoadSchedule}
           onCreateNew={() => { setIsSettingsOpen(true); setIsSidebarOpen(false); }}
           onOpenSettings={() => setIsSettingsOpen(true)}
-          onRequestNotification={requestNotificationPermission}
+          onRequestNotification={async () => {
+            // Xin quyền Notification trước
+            const granted = await requestNotificationPermission();
+            if (!granted) return false;
+
+            // Lấy (hoặc tạo lại) FCM token cho người dùng hiện tại
+            const token = await initFCMMessaging();
+            if (token) {
+              try {
+                await navigator.clipboard.writeText(token);
+                alert("✅ Đã bật thông báo và sao chép token vào clipboard:\n\n" + token);
+              } catch {
+                alert("✅ Đã bật thông báo!\n\nToken của bạn:\n" + token);
+              }
+            }
+            return true;
+          }}
           onOpenUIKit={() => { setView('uikit'); setIsSidebarOpen(false); }}
           onOpenAbout={() => { setView('about'); setIsSidebarOpen(false); }}
           themeColor={themeColor}

@@ -1,10 +1,13 @@
 
-const CACHE_NAME = 'lms-scheduler-v1';
+const CACHE_NAME = 'lms-scheduler-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
-  '/index.tsx',
   '/manifest.json',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/android-chrome-192x192.png',
+  '/android-chrome-512x512.png',
   'https://cdn.tailwindcss.com',
   'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap',
   'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.12.0/sql-wasm.js',
@@ -248,3 +251,47 @@ if ('periodicSync' in self.registration) {
     }
   });
 }
+
+// Generic Push Notification handler (Firebase Cloud Messaging / Web Push)
+self.addEventListener('push', (event) => {
+  if (!event.data) {
+    return;
+  }
+
+  let data = {};
+  try {
+    data = event.data.json();
+  } catch (e) {
+    data = { body: event.data.text() };
+  }
+
+  const anyData = /** @type {any} */ (data);
+
+  const title =
+    (anyData.notification && anyData.notification.title) ||
+    anyData.title ||
+    'Hiền Ham Học';
+
+  const body =
+    (anyData.notification && anyData.notification.body) ||
+    anyData.body ||
+    'Bạn có thông báo mới';
+
+  const icon =
+    (anyData.notification && anyData.notification.icon) ||
+    anyData.icon ||
+    '/icon-192.png';
+
+  const notificationData = anyData.data || {};
+
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      icon,
+      badge: '/icon-192.png',
+      data: notificationData,
+      tag: anyData.tag || 'hien-ham-hoc',
+      requireInteraction: true,
+    })
+  );
+});
