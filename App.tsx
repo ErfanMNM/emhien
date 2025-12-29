@@ -152,6 +152,36 @@ const App: React.FC = () => {
   }, [multiMonthData, personalEvents]);
 
   // --- ALARM CHECK LOGIC ---
+  // Sync alarms data với Service Worker để chạy ngầm
+  useEffect(() => {
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+      // Gửi dữ liệu alarms cho Service Worker
+      navigator.serviceWorker.controller.postMessage({
+        type: 'UPDATE_ALARMS',
+        payload: {
+          events: allEvents,
+          alarms: alarms,
+          notifiedEvents: Array.from(notifiedEvents)
+        }
+      });
+      
+      // Bắt đầu background checking
+      navigator.serviceWorker.controller.postMessage({
+        type: 'START_BACKGROUND_ALARMS'
+      });
+    }
+    
+    return () => {
+      // Dừng background checking khi unmount (optional)
+      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+          type: 'STOP_BACKGROUND_ALARMS'
+        });
+      }
+    };
+  }, [allEvents, alarms, notifiedEvents]);
+
+  // Local alarm check (cho khi app đang mở)
   useEffect(() => {
     const checkAlarms = () => {
         if (allEvents.length === 0) return;
@@ -179,6 +209,43 @@ const App: React.FC = () => {
 
     const interval = setInterval(checkAlarms, 10000); // Check every 10 seconds
     return () => clearInterval(interval);
+  }, [allEvents, alarms, notifiedEvents]);
+
+  // Listen for background notifications from Service Worker
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      const handleMessage = async (messageEvent: MessageEvent) => {
+        if (messageEvent.data && messageEvent.data.type === 'ALARM_TRIGGERED') {
+          const eventId = messageEvent.data.eventId;
+          // Mark as notified to prevent duplicate
+          const triggeredEvent = allEvents.find(e => e.id === eventId);
+          if (triggeredEvent) {
+            markEventAsNotified(eventId);
+            setNotifiedEvents(prev => new Set(prev).add(eventId));
+          }
+        }
+        
+        // Respond to Service Worker request for alarms data
+        if (messageEvent.data && messageEvent.data.type === 'REQUEST_ALARMS_DATA') {
+          const registration = await navigator.serviceWorker.ready;
+          if (registration.active) {
+            registration.active.postMessage({
+              type: 'UPDATE_ALARMS',
+              payload: {
+                events: allEvents,
+                alarms: alarms,
+                notifiedEvents: Array.from(notifiedEvents)
+              }
+            });
+          }
+        }
+      };
+      
+      navigator.serviceWorker.addEventListener('message', handleMessage);
+      return () => {
+        navigator.serviceWorker.removeEventListener('message', handleMessage);
+      };
+    }
   }, [allEvents, alarms, notifiedEvents]);
 
   const triggerAlarm = (event: CalendarEvent) => {

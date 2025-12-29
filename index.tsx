@@ -13,6 +13,17 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js')
       .then((registration) => {
         console.log('ServiceWorker registration successful with scope: ', registration.scope);
+        
+        // Request periodic background sync (if supported)
+        if ('periodicSync' in registration && (registration as any).periodicSync) {
+          (registration as any).periodicSync.register('check-alarms', {
+            minInterval: 60000 // Check every minute
+          }).then(() => {
+            console.log('[PWA] Periodic background sync registered');
+          }).catch((err: any) => {
+            console.log('[PWA] Periodic sync not supported:', err);
+          });
+        }
       })
       .catch((err) => {
         console.log('ServiceWorker registration failed: ', err);

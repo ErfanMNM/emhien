@@ -24,15 +24,23 @@ self.addEventListener('install', (event) => {
 // Kích hoạt: Xóa các cache cũ nếu có
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
+    Promise.all([
+      caches.keys().then((cacheNames) => {
+        return Promise.all(
+          cacheNames.map((cacheName) => {
+            if (cacheName !== CACHE_NAME) {
+              return caches.delete(cacheName);
+            }
+          })
+        );
+      }),
+      // Request alarms data from clients when activating
+      self.clients.matchAll().then(clients => {
+        clients.forEach(client => {
+          client.postMessage({ type: 'REQUEST_ALARMS_DATA' });
+        });
+      })
+    ])
   );
   self.clients.claim();
 });
@@ -82,16 +90,161 @@ self.addEventListener('fetch', (event) => {
 // Click vào thông báo
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+  
+  const action = event.action;
+  const notificationData = event.notification.data;
+  
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      if (action === 'dismiss') {
+        return;
+      }
+      
+      // Focus existing window or open new one
       for (const client of clientList) {
         if (client.url && 'focus' in client) {
-          return client.focus();
+          return client.focus().then(() => {
+            // Notify client about the notification click
+            if (notificationData && notificationData.eventId) {
+              client.postMessage({
+                type: 'NOTIFICATION_CLICKED',
+                eventId: notificationData.eventId
+              });
+            }
+          });
         }
       }
+      
       if (clients.openWindow) {
-        return clients.openWindow('/');
+        return clients.openWindow('/').then((client) => {
+          if (client && notificationData && notificationData.eventId) {
+            client.postMessage({
+              type: 'NOTIFICATION_CLICKED',
+              eventId: notificationData.eventId
+            });
+          }
+        });
       }
     })
   );
 });
+
+// Background Alarm Checking - Chạy ngầm để kiểm tra alarms
+let alarmsData = null;
+let alarmCheckInterval = null;
+
+// Nhận dữ liệu alarms từ main app
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'UPDATE_ALARMS') {
+    alarmsData = event.data.payload;
+    console.log('[SW] Alarms data updated', alarmsData);
+  }
+  
+  if (event.data && event.data.type === 'START_BACKGROUND_ALARMS') {
+    startBackgroundAlarmCheck();
+  }
+  
+  if (event.data && event.data.type === 'STOP_BACKGROUND_ALARMS') {
+    stopBackgroundAlarmCheck();
+  }
+});
+
+function startBackgroundAlarmCheck() {
+  if (alarmCheckInterval) {
+    clearInterval(alarmCheckInterval);
+  }
+  
+  // Check alarms every 30 seconds in background
+  alarmCheckInterval = setInterval(() => {
+    checkAlarms();
+  }, 30000);
+  
+  // Also check immediately
+  checkAlarms();
+  console.log('[SW] Background alarm checking started');
+}
+
+function stopBackgroundAlarmCheck() {
+  if (alarmCheckInterval) {
+    clearInterval(alarmCheckInterval);
+    alarmCheckInterval = null;
+    console.log('[SW] Background alarm checking stopped');
+  }
+}
+
+async function checkAlarms() {
+  if (!alarmsData || !alarmsData.events || alarmsData.events.length === 0) {
+    return;
+  }
+  
+  const now = Math.floor(Date.now() / 1000);
+  const { events, alarms, notifiedEvents } = alarmsData;
+  
+  events.forEach(event => {
+    const alarmMins = alarms[event.id];
+    if (alarmMins === undefined || alarmMins === null) return;
+    
+    // Skip if already notified
+    if (notifiedEvents && notifiedEvents.includes(event.id)) return;
+    
+    const triggerTime = event.timestart - (alarmMins * 60);
+    
+    // Check if should trigger
+    if (now >= triggerTime && now <= event.timestart + 300) {
+      triggerBackgroundNotification(event, alarmMins);
+      
+      // Notify main app that event was notified
+      self.clients.matchAll().then(clients => {
+        clients.forEach(client => {
+          client.postMessage({
+            type: 'ALARM_TRIGGERED',
+            eventId: event.id
+          });
+        });
+      });
+    }
+  });
+}
+
+function triggerBackgroundNotification(event, alarmMins) {
+  const title = 'Hiền Ham Học - Nhắc nhở';
+  const body = alarmMins === 0
+    ? `Sự kiện "${event.activityname}" đang bắt đầu!`
+    : `Sắp diễn ra: "${event.activityname}" trong ${alarmMins} phút nữa.`;
+  
+  const icon = event.icon?.iconurl || '/icon-192.png';
+  
+  self.registration.showNotification(title, {
+    body,
+    icon,
+    badge: '/icon-192.png',
+    vibrate: [200, 100, 200, 100, 200],
+    requireInteraction: true,
+    tag: `alarm-${event.id}`,
+    data: {
+      eventId: event.id,
+      url: '/'
+    },
+    actions: [
+      {
+        action: 'view',
+        title: 'Xem chi tiết'
+      },
+      {
+        action: 'dismiss',
+        title: 'Đóng'
+      }
+    ]
+  });
+  
+  console.log('[SW] Background notification triggered:', title, body);
+}
+
+// Periodic Background Sync (if supported)
+if ('periodicSync' in self.registration) {
+  self.addEventListener('periodicsync', (event) => {
+    if (event.tag === 'check-alarms') {
+      event.waitUntil(checkAlarms());
+    }
+  });
+}
