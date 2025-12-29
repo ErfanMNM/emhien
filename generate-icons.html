@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Generate PWA Icons</title>
+</head>
+<body>
+    <h1>Generate PWA Icons for Hiền Ham Học</h1>
+    <p>Right-click each canvas below and "Save image as..." to save as PNG:</p>
+    
+    <div style="margin: 20px;">
+        <h2>192x192 Icon</h2>
+        <canvas id="icon192" width="192" height="192"></canvas>
+    </div>
+    
+    <div style="margin: 20px;">
+        <h2>512x512 Icon</h2>
+        <canvas id="icon512" width="512" height="512"></canvas>
+    </div>
+
+    <script>
+        function drawIcon(canvas, size) {
+            const ctx = canvas.getContext('2d');
+            
+            // Background gradient (blue)
+            const gradient = ctx.createLinearGradient(0, 0, size, size);
+            gradient.addColorStop(0, '#2563eb');
+            gradient.addColorStop(1, '#1d4ed8');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, size, size);
+            
+            // Draw graduation cap icon
+            ctx.fillStyle = '#ffffff';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = size / 20;
+            
+            // Cap base (trapezoid)
+            const baseY = size * 0.6;
+            const baseWidth = size * 0.7;
+            ctx.beginPath();
+            ctx.moveTo(size * 0.15, baseY);
+            ctx.lineTo(size * 0.35, size * 0.4);
+            ctx.lineTo(size * 0.65, size * 0.4);
+            ctx.lineTo(size * 0.85, baseY);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Cap top (square)
+            const squareSize = size * 0.25;
+            const squareX = size * 0.375;
+            const squareY = size * 0.35;
+            ctx.fillRect(squareX, squareY, squareSize, squareSize);
+            
+            // Tassel
+            ctx.beginPath();
+            ctx.moveTo(size * 0.5, size * 0.6);
+            ctx.lineTo(size * 0.5, size * 0.75);
+            ctx.lineTo(size * 0.45, size * 0.8);
+            ctx.lineTo(size * 0.5, size * 0.75);
+            ctx.lineTo(size * 0.55, size * 0.8);
+            ctx.stroke();
+        }
+        
+        drawIcon(document.getElementById('icon192'), 192);
+        drawIcon(document.getElementById('icon512'), 512);
+    </script>
+</body>
+</html>
+
