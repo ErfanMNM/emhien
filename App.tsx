@@ -174,32 +174,49 @@ const App: React.FC = () => {
   }, [multiMonthData, personalEvents]);
 
   // --- ALARM CHECK LOGIC ---
-  // Sync alarms data với Service Worker để chạy ngầm
+  // Sync alarms data với Service Worker để chạy ngầm (hoạt động cả khi app đóng)
   useEffect(() => {
-    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-      // Gửi dữ liệu alarms cho Service Worker
-      navigator.serviceWorker.controller.postMessage({
-        type: 'UPDATE_ALARMS',
-        payload: {
-          events: allEvents,
-          alarms: alarms,
-          notifiedEvents: Array.from(notifiedEvents)
+    const syncWithServiceWorker = async () => {
+      if ('serviceWorker' in navigator) {
+        try {
+          const registration = await navigator.serviceWorker.ready;
+          
+          // Gửi dữ liệu alarms cho Service Worker
+          if (registration.active) {
+            registration.active.postMessage({
+              type: 'UPDATE_ALARMS',
+              payload: {
+                events: allEvents,
+                alarms: alarms,
+                notifiedEvents: Array.from(notifiedEvents)
+              }
+            });
+            
+            // Bắt đầu background checking
+            registration.active.postMessage({
+              type: 'START_BACKGROUND_ALARMS'
+            });
+            
+            console.log('[App] Đã sync alarms với Service Worker');
+          }
+        } catch (error) {
+          console.error('[App] Lỗi sync với Service Worker:', error);
         }
-      });
-      
-      // Bắt đầu background checking
-      navigator.serviceWorker.controller.postMessage({
-        type: 'START_BACKGROUND_ALARMS'
+      }
+    };
+    
+    // Sync ngay khi có thay đổi
+    syncWithServiceWorker();
+    
+    // Đồng thời sync lên Cloudflare Worker để hoạt động khi app đóng hoàn toàn
+    if (allEvents.length > 0 && Object.keys(alarms).length > 0) {
+      syncAlarmsToWorker(allEvents, alarms).catch(err => {
+        console.warn('[App] Lỗi sync alarms lên Cloudflare Worker:', err);
       });
     }
     
     return () => {
-      // Dừng background checking khi unmount (optional)
-      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-        navigator.serviceWorker.controller.postMessage({
-          type: 'STOP_BACKGROUND_ALARMS'
-        });
-      }
+      // Không dừng background checking khi unmount để notifications vẫn hoạt động
     };
   }, [allEvents, alarms, notifiedEvents]);
 
@@ -244,6 +261,17 @@ const App: React.FC = () => {
           if (triggeredEvent) {
             markEventAsNotified(eventId);
             setNotifiedEvents(prev => new Set(prev).add(eventId));
+            // Hiển thị modal nếu app đang mở
+            setRingingEvent(triggeredEvent);
+          }
+        }
+        
+        // Handle notification click
+        if (messageEvent.data && messageEvent.data.type === 'NOTIFICATION_CLICKED') {
+          const eventId = messageEvent.data.eventId;
+          const clickedEvent = allEvents.find(e => e.id === eventId);
+          if (clickedEvent) {
+            setSelectedEvent(clickedEvent);
           }
         }
         
