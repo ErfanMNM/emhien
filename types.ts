@@ -93,7 +93,7 @@ export interface ScheduleMetadata {
 }
 
 export type ThemeColor = 'blue' | 'rose' | 'emerald' | 'violet' | 'luxury';
-export type AppView = 'weekly' | 'calendar' | 'list' | 'uikit';
+export type AppView = 'weekly' | 'calendar' | 'list' | 'uikit' | 'about';
 
 // PWA Install Prompt Type
 export interface BeforeInstallPromptEvent extends Event {

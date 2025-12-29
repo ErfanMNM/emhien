@@ -62,8 +62,8 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess, onBack }) => {
                     <div className="inline-flex p-3 bg-white/20 rounded-2xl mb-4 text-white">
                         <GraduationCap size={40} />
                     </div>
-                    <h1 className="text-2xl font-bold text-white mb-1">LMS Scheduler</h1>
-                    <p className="text-blue-100 text-sm">Đồng bộ đám mây với Firebase</p>
+                    <h1 className="text-2xl font-bold text-white mb-1">Hiền Ham Học</h1>
+                    <p className="text-blue-100 text-sm">Siêu Vip • Đồng bộ đám mây với Firebase</p>
                 </div>
 
                 <div className="p-8">

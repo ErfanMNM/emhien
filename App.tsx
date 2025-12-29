@@ -13,6 +13,7 @@ import AuthPage from './components/AuthPage';
 import HeartsBackground from './components/HeartsBackground';
 import UIKit from './components/UIKit';
 import AlarmRingingModal from './components/AlarmRingingModal';
+import AboutPage from './components/AboutPage';
 import { CalendarEvent, Course, CalendarData, ScheduleMetadata, ThemeColor, AppView, MultiMonthData, BeforeInstallPromptEvent } from './types';
 import { filterEventsByCourse, shouldHideEvent, requestNotificationPermission, getThemeColors, sendNotification } from './utils';
 import { initDB, getSchedulesFromDB, getFullScheduleData, saveScheduleToDB, updateEventMetaInDB, deletePersonalEventFromDB, markEventAsNotified } from './lib/db';
@@ -185,7 +186,7 @@ const App: React.FC = () => {
       const body = mins === 0 
           ? `Sự kiện "${event.activityname}" đang bắt đầu!` 
           : `Sắp diễn ra: "${event.activityname}" trong ${mins} phút nữa.`;
-      sendNotification("LMS Scheduler", body, event.icon.iconurl);
+      sendNotification("Hiền Ham Học", body, event.icon.iconurl);
 
       // 3. Mark as notified in DB & State to prevent re-ring
       markEventAsNotified(event.id);
@@ -301,6 +302,7 @@ const App: React.FC = () => {
   if (showAuth) return <AuthPage onLoginSuccess={() => setShowAuth(false)} onBack={() => setShowAuth(false)} />;
   if (isLoadingDB) return <div className="min-h-screen bg-gray-50 flex items-center justify-center"><div className="text-center"><Loader2 className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" /><p className="font-bold text-gray-600">Nạp Database SQLite...</p></div></div>;
   if (view === 'uikit') return <UIKit onBack={() => setView('weekly')} currentTheme={themeColor} />;
+  if (view === 'about') return <AboutPage onBack={() => setView('weekly')} themeColor={themeColor} />;
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex font-sans text-gray-900">
@@ -314,6 +316,7 @@ const App: React.FC = () => {
           onOpenSettings={() => setIsSettingsOpen(true)}
           onRequestNotification={requestNotificationPermission}
           onOpenUIKit={() => { setView('uikit'); setIsSidebarOpen(false); }}
+          onOpenAbout={() => { setView('about'); setIsSidebarOpen(false); }}
           themeColor={themeColor}
           installPrompt={installPrompt}
           isInstalled={isInstalled}
@@ -332,7 +335,8 @@ const App: React.FC = () => {
                     </div>
                     <div>
                         <h1 className="text-xl sm:text-2xl font-bold text-gray-800 tracking-tight flex flex-col sm:flex-row sm:items-center sm:gap-2 leading-none sm:leading-normal">
-                           <span>LMS Scheduler</span>
+                           <span>Hiền Ham Học</span>
+                           <span className="text-[10px] bg-gradient-to-r from-yellow-400 via-amber-500 to-yellow-600 text-white px-2 py-0.5 rounded-full uppercase font-black shadow-lg border border-amber-300 w-fit mt-1 sm:mt-0 animate-pulse" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.2)' }}>Siêu Vip</span>
                            {!isOnline && <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded uppercase w-fit mt-1 sm:mt-0"><WifiOff size={10} className="inline mr-1"/>Offline</span>}
                         </h1>
                         {currentScheduleName && <p className="text-xs text-gray-500 font-medium truncate max-w-[200px] sm:max-w-none">{currentScheduleName}</p>}

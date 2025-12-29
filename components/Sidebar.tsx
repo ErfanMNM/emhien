@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { ScheduleMetadata, ThemeColor, BeforeInstallPromptEvent } from '../types';
-import { Plus, Calendar, X, GraduationCap, Settings, Bell, ChevronRight, Heart, LayoutTemplate, Download } from 'lucide-react';
+import { Plus, Calendar, X, GraduationCap, Settings, Bell, ChevronRight, Heart, LayoutTemplate, Download, Info } from 'lucide-react';
 import { getThemeColors } from '../utils';
 
 interface SidebarProps {
@@ -14,6 +14,7 @@ interface SidebarProps {
   onOpenSettings: () => void;
   onRequestNotification: () => Promise<boolean>; // Updated to return Promise
   onOpenUIKit?: () => void;
+  onOpenAbout?: () => void;
   themeColor: ThemeColor;
   installPrompt?: BeforeInstallPromptEvent | null;
   isInstalled?: boolean;
@@ -30,6 +31,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onOpenSettings,
   onRequestNotification,
   onOpenUIKit,
+  onOpenAbout,
   themeColor,
   installPrompt,
   isInstalled = false,
@@ -81,7 +83,7 @@ const Sidebar: React.FC<SidebarProps> = ({
               <div className={`${theme.bgMedium} p-2 rounded-xl ${theme.textDark}`}>
                 <GraduationCap className="w-6 h-6" />
               </div>
-              <span>LMS Scheduler</span>
+              <span>Hiền Ham Học</span>
            </div>
            <button onClick={onClose} className="lg:hidden text-gray-500 hover:bg-gray-200 rounded-full p-2 transition-colors">
              <X size={20} />
@@ -143,6 +145,16 @@ const Sidebar: React.FC<SidebarProps> = ({
             >
               <LayoutTemplate size={20} />
               <span>UI Design Kit</span>
+            </button>
+          )}
+
+          {onOpenAbout && (
+             <button
+              onClick={onOpenAbout}
+              className="w-full flex items-center gap-4 px-4 py-3.5 text-gray-600 hover:bg-gray-100 rounded-r-full transition-all font-medium mt-2"
+            >
+              <Info size={20} />
+              <span>Về ứng dụng</span>
             </button>
           )}
         </div>

@@ -203,7 +203,7 @@ const UIKit: React.FC<UIKitProps> = ({ onBack, currentTheme }) => {
              <div className="flex items-center justify-center gap-1.5 font-bold">
                 Design with <Heart size={14} className="text-rose-500 fill-rose-500" /> by Bé Hiền Team
              </div>
-             <p className="mt-2">© 2025 LMS Study Scheduler Design Guidelines</p>
+             <p className="mt-2">© 2025 Hiền Ham Học Design Guidelines</p>
         </footer>
       </div>
     </div>
