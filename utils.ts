@@ -318,44 +318,79 @@ const urlBase64ToUint8Array = (base64String: string): Uint8Array => {
 export const subscribeWebPushWithWorker = async () => {
   if (typeof window === 'undefined') return;
 
+  console.log('[WebPush] Bắt đầu đăng ký Web Push...');
+
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-    alert('Trình duyệt không hỗ trợ Web Push.');
+    const msg = 'Trình duyệt không hỗ trợ Web Push.';
+    console.error('[WebPush]', msg);
+    alert(msg);
     return;
   }
 
+  console.log('[WebPush] Xin quyền Notification...');
   const permission = await Notification.requestPermission();
   if (permission !== 'granted') {
-    alert('Bạn cần cho phép quyền Thông báo để nhận Web Push.');
+    const msg = 'Bạn cần cho phép quyền Thông báo để nhận Web Push.';
+    console.warn('[WebPush]', msg);
+    alert(msg);
     return;
   }
 
+  console.log('[WebPush] Đang đợi service worker ready...');
   const registration = await navigator.serviceWorker.ready;
+  console.log('[WebPush] Service worker ready:', registration);
 
   const applicationServerKey = urlBase64ToUint8Array(WORKER_VAPID_PUBLIC_KEY);
+  console.log('[WebPush] Đang subscribe với VAPID key...');
 
-  const subscription = await registration.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey,
-  });
+  let subscription;
+  try {
+    subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey,
+    });
+    console.log('[WebPush] Subscription thành công:', subscription);
+  } catch (err) {
+    console.error('[WebPush] Lỗi khi subscribe:', err);
+    alert('❌ Lỗi đăng ký Web Push: ' + (err instanceof Error ? err.message : String(err)));
+    return;
+  }
+
+  // Dùng absolute URL để đảm bảo gọi đúng domain Worker
+  const apiUrl = `${window.location.origin}/api/push/test`;
+  console.log('[WebPush] Gửi subscription lên:', apiUrl);
 
   try {
-    const res = await fetch('/api/push/test', {
+    const res = await fetch(apiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        subscription,
+        subscription: {
+          endpoint: subscription.endpoint,
+          keys: {
+            p256dh: btoa(String.fromCharCode(...new Uint8Array(subscription.getKey('p256dh')!))),
+            auth: btoa(String.fromCharCode(...new Uint8Array(subscription.getKey('auth')!))),
+          },
+        },
         title: 'Hiền Ham Học (Worker)',
         body: 'Thông báo test từ Cloudflare Worker',
       }),
     });
 
+    console.log('[WebPush] Response status:', res.status, res.statusText);
+
     if (!res.ok) {
-      throw new Error('Request failed');
+      const errorText = await res.text();
+      console.error('[WebPush] Response error:', errorText);
+      throw new Error(`HTTP ${res.status}: ${errorText}`);
     }
 
-    alert('✅ Đã đăng ký Web Push với Cloudflare Worker.\nĐang gửi thông báo test...');
+    const result = await res.json();
+    console.log('[WebPush] Response OK:', result);
+    alert('✅ Đã đăng ký Web Push với Cloudflare Worker.\nĐang gửi thông báo test...\n\nKiểm tra notification trong vài giây!');
   } catch (e) {
-    console.error(e);
-    alert('❌ Gửi thông báo test qua Cloudflare Worker thất bại.');
+    console.error('[WebPush] Lỗi khi gửi request:', e);
+    const errorMsg = e instanceof Error ? e.message : String(e);
+    alert('❌ Gửi thông báo test qua Cloudflare Worker thất bại.\n\nLỗi: ' + errorMsg + '\n\nKiểm tra Console để xem chi tiết.');
   }
 };
