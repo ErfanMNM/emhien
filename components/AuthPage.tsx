@@ -5,7 +5,7 @@ import {
     signInWithEmailAndPassword, 
     createUserWithEmailAndPassword, 
     updateProfile 
-} from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
+} from 'firebase/auth';
 import { GraduationCap, Loader2, LogIn, UserPlus, AlertCircle, ArrowLeft } from 'lucide-react';
 
 interface AuthPageProps {

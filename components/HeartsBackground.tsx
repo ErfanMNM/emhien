@@ -17,13 +17,13 @@ const HeartsBackground: React.FC = () => {
 
   useEffect(() => {
     // Tạo 35 trái tim với các thông số ngẫu nhiên
-    const initialHearts = Array.from({ length: 35 }).map((_, i) => ({
+    const initialHearts: HeartItem[] = Array.from({ length: 35 }).map((_, i) => ({
       id: i,
       left: `${Math.random() * 100}%`,
       size: 20 + Math.random() * 40,
       duration: 8 + Math.random() * 12,
       delay: Math.random() * 15,
-      animation: Math.random() > 0.4 ? 'fallDown' : 'floatUp', // 60% rơi xuống, 40% bay lên
+      animation: (Math.random() > 0.4 ? 'fallDown' : 'floatUp') as 'floatUp' | 'fallDown', // 60% rơi xuống, 40% bay lên
       hasText: Math.random() > 0.3, // 70% trái tim có kèm chữ
     }));
     setHearts(initialHearts);

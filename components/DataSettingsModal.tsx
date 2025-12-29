@@ -5,7 +5,7 @@ import { CalendarData, ThemeColor } from '../types';
 import { getThemeColors, sendNotification, requestNotificationPermission } from '../utils';
 import { exportDBFile, importDBFile, getDBBinary } from '../lib/db';
 import { auth, storage } from '../lib/firebase';
-import { ref, uploadBytes, getDownloadURL, deleteObject, getMetadata } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js';
+import { ref, uploadBytes, getDownloadURL, deleteObject, getMetadata } from 'firebase/storage';
 
 interface DataSettingsModalProps {
   isOpen: boolean;

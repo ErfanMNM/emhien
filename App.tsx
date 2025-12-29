@@ -17,7 +17,7 @@ import { CalendarEvent, Course, CalendarData, ScheduleMetadata, ThemeColor, AppV
 import { filterEventsByCourse, shouldHideEvent, requestNotificationPermission, getThemeColors, sendNotification } from './utils';
 import { initDB, getSchedulesFromDB, getFullScheduleData, saveScheduleToDB, updateEventMetaInDB, deletePersonalEventFromDB, markEventAsNotified } from './lib/db';
 import { auth } from './lib/firebase';
-import { onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 
 const LS_KEY_THEME = 'lms_theme_color';
 
