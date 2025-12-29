@@ -53,6 +53,16 @@ const EventModal: React.FC<EventModalProps> = ({
            // Người dùng vừa bấm "Block" hoặc tắt popup
            return;
        }
+
+       // Tự động đăng ký Web Push subscription để nhận thông báo khi app đóng
+       try {
+         const { ensureWebPushSubscription } = await import('../utils');
+         await ensureWebPushSubscription();
+         console.log('[EventModal] Đã đảm bảo Web Push subscription khi đặt alarm');
+       } catch (e) {
+         console.warn('[EventModal] Không thể đăng ký Web Push:', e);
+         // Vẫn tiếp tục đặt alarm dù Web Push không thành công
+       }
     }
     
     // Nếu đã có quyền hoặc đang tắt báo thức (minutes === null)

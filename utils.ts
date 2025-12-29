@@ -300,9 +300,106 @@ export const sendNotification = async (title: string, body: string, icon?: strin
  * Cloudflare Worker Web Push Helpers
  * - Đăng ký subscription Web Push với VAPID public key
  * - Gửi subscription lên endpoint /api/push/test trên Worker để test ngay
+ * - Lưu subscription vào localStorage để dùng lại
  */
 const WORKER_VAPID_PUBLIC_KEY =
   'BG_EgHJTWkd_VYz9Smnaxxk0RdEnOx36kvRPZ7x9jVM6XKxMkWVgYIcbU4j0HiO-X6xPbvlWXqxk8pU7MkHeyA4';
+
+const STORAGE_KEY_WEB_PUSH_SUBSCRIPTION = 'web_push_subscription';
+
+/**
+ * Lưu Web Push subscription vào localStorage
+ */
+export const saveWebPushSubscription = (subscription: PushSubscription) => {
+  try {
+    const subJson = {
+      endpoint: subscription.endpoint,
+      keys: {
+        p256dh: btoa(String.fromCharCode(...new Uint8Array(subscription.getKey('p256dh')!))),
+        auth: btoa(String.fromCharCode(...new Uint8Array(subscription.getKey('auth')!))),
+      },
+    };
+    localStorage.setItem(STORAGE_KEY_WEB_PUSH_SUBSCRIPTION, JSON.stringify(subJson));
+    console.log('[WebPush] Subscription đã lưu vào localStorage');
+  } catch (e) {
+    console.error('[WebPush] Lỗi lưu subscription:', e);
+  }
+};
+
+/**
+ * Lấy Web Push subscription từ localStorage
+ */
+export const getWebPushSubscription = (): any | null => {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY_WEB_PUSH_SUBSCRIPTION);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (e) {
+    console.error('[WebPush] Lỗi đọc subscription:', e);
+  }
+  return null;
+};
+
+/**
+ * Đảm bảo đã đăng ký Web Push subscription (nếu chưa có thì đăng ký)
+ */
+export const ensureWebPushSubscription = async (): Promise<PushSubscription | null> => {
+  if (typeof window === 'undefined') return null;
+
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    console.warn('[WebPush] Trình duyệt không hỗ trợ Web Push');
+    return null;
+  }
+
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') {
+    console.warn('[WebPush] Chưa có quyền Notification');
+    return null;
+  }
+
+  const registration = await navigator.serviceWorker.ready;
+
+  // Kiểm tra xem đã có subscription chưa
+  let subscription = await registration.pushManager.getSubscription();
+  
+  if (!subscription) {
+    // Nếu chưa có, thử load từ localStorage
+    const stored = getWebPushSubscription();
+    if (stored) {
+      try {
+        // Thử subscribe lại với subscription cũ
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(WORKER_VAPID_PUBLIC_KEY),
+        });
+      } catch (e) {
+        console.warn('[WebPush] Không thể restore subscription cũ, tạo mới:', e);
+      }
+    }
+
+    // Nếu vẫn chưa có, tạo mới
+    if (!subscription) {
+      try {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(WORKER_VAPID_PUBLIC_KEY),
+        });
+        console.log('[WebPush] Đã tạo subscription mới');
+      } catch (e) {
+        console.error('[WebPush] Lỗi tạo subscription:', e);
+        return null;
+      }
+    }
+
+    // Lưu subscription mới vào localStorage
+    saveWebPushSubscription(subscription);
+  } else {
+    console.log('[WebPush] Đã có subscription sẵn');
+  }
+
+  return subscription;
+};
 
 const urlBase64ToUint8Array = (base64String: string): Uint8Array => {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -320,39 +417,9 @@ export const subscribeWebPushWithWorker = async () => {
 
   console.log('[WebPush] Bắt đầu đăng ký Web Push...');
 
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-    const msg = 'Trình duyệt không hỗ trợ Web Push.';
-    console.error('[WebPush]', msg);
-    alert(msg);
-    return;
-  }
-
-  console.log('[WebPush] Xin quyền Notification...');
-  const permission = await Notification.requestPermission();
-  if (permission !== 'granted') {
-    const msg = 'Bạn cần cho phép quyền Thông báo để nhận Web Push.';
-    console.warn('[WebPush]', msg);
-    alert(msg);
-    return;
-  }
-
-  console.log('[WebPush] Đang đợi service worker ready...');
-  const registration = await navigator.serviceWorker.ready;
-  console.log('[WebPush] Service worker ready:', registration);
-
-  const applicationServerKey = urlBase64ToUint8Array(WORKER_VAPID_PUBLIC_KEY);
-  console.log('[WebPush] Đang subscribe với VAPID key...');
-
-  let subscription;
-  try {
-    subscription = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey,
-    });
-    console.log('[WebPush] Subscription thành công:', subscription);
-  } catch (err) {
-    console.error('[WebPush] Lỗi khi subscribe:', err);
-    alert('❌ Lỗi đăng ký Web Push: ' + (err instanceof Error ? err.message : String(err)));
+  const subscription = await ensureWebPushSubscription();
+  if (!subscription) {
+    alert('❌ Không thể đăng ký Web Push. Kiểm tra Console để xem chi tiết.');
     return;
   }
 
@@ -392,5 +459,51 @@ export const subscribeWebPushWithWorker = async () => {
     console.error('[WebPush] Lỗi khi gửi request:', e);
     const errorMsg = e instanceof Error ? e.message : String(e);
     alert('❌ Gửi thông báo test qua Cloudflare Worker thất bại.\n\nLỗi: ' + errorMsg + '\n\nKiểm tra Console để xem chi tiết.');
+  }
+};
+
+/**
+ * Đồng bộ alarms data lên Worker để Worker có thể gửi push notification khi đến giờ
+ */
+export const syncAlarmsToWorker = async (events: any[], alarms: Record<number, number>) => {
+  const subscription = await ensureWebPushSubscription();
+  if (!subscription) {
+    console.warn('[WebPush] Không có subscription, bỏ qua sync alarms');
+    return;
+  }
+
+  const apiUrl = `${window.location.origin}/api/push/sync-alarms`;
+  console.log('[WebPush] Đồng bộ alarms lên Worker...');
+
+  try {
+    const res = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        subscription: {
+          endpoint: subscription.endpoint,
+          keys: {
+            p256dh: btoa(String.fromCharCode(...new Uint8Array(subscription.getKey('p256dh')!))),
+            auth: btoa(String.fromCharCode(...new Uint8Array(subscription.getKey('auth')!))),
+          },
+        },
+        events: events.map(e => ({
+          id: e.id,
+          activityname: e.activityname,
+          timestart: e.timestart,
+          icon: e.icon?.iconurl || '/icon-192.png',
+        })),
+        alarms,
+      }),
+    });
+
+    if (!res.ok) {
+      console.error('[WebPush] Sync alarms failed:', res.status);
+      return;
+    }
+
+    console.log('[WebPush] Đã đồng bộ alarms lên Worker');
+  } catch (e) {
+    console.error('[WebPush] Lỗi sync alarms:', e);
   }
 };

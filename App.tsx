@@ -15,7 +15,7 @@ import UIKit from './components/UIKit';
 import AlarmRingingModal from './components/AlarmRingingModal';
 import AboutPage from './components/AboutPage';
 import { CalendarEvent, Course, CalendarData, ScheduleMetadata, ThemeColor, AppView, MultiMonthData, BeforeInstallPromptEvent } from './types';
-import { filterEventsByCourse, shouldHideEvent, requestNotificationPermission, getThemeColors, sendNotification } from './utils';
+import { filterEventsByCourse, shouldHideEvent, requestNotificationPermission, getThemeColors, sendNotification, syncAlarmsToWorker } from './utils';
 import { initDB, getSchedulesFromDB, getFullScheduleData, saveScheduleToDB, updateEventMetaInDB, deletePersonalEventFromDB, markEventAsNotified } from './lib/db';
 import { auth } from './lib/firebase';
 import { initFCMMessaging } from './lib/messaging';
@@ -312,7 +312,7 @@ const App: React.FC = () => {
     });
   };
 
-  const handleSetAlarm = (id: number, mins: number | null) => {
+  const handleSetAlarm = async (id: number, mins: number | null) => {
       setAlarms(prev => {
           const next = { ...prev };
           if (mins === null) delete next[id]; else next[id] = mins;
@@ -328,6 +328,13 @@ const App: React.FC = () => {
               });
               // Note: We don't clear last_notified_at in DB here to keep history, 
               // but purely for logic, re-setting alarm implies wanting to be notified again.
+          }
+          
+          // Đồng bộ alarms lên Worker để Worker có thể gửi push notification khi đến giờ
+          if (mins !== null && allEvents.length > 0) {
+            syncAlarmsToWorker(allEvents, { ...next, [id]: mins }).catch(err => {
+              console.warn('[App] Lỗi sync alarms lên Worker:', err);
+            });
           }
           
           return next;

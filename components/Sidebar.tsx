@@ -174,14 +174,8 @@ const Sidebar: React.FC<SidebarProps> = ({
               </div>
             )}
             
-            {/* Mobile-only buttons */}
-            <div className="bg-white rounded-2xl p-2 shadow-sm border border-gray-100 lg:hidden mb-4 space-y-1">
-               <button 
-                  onClick={handleRequestNotification}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-xl transition-colors font-medium text-sm"
-               >
-                  <Bell size={18} /> <span>Bật thông báo</span>
-               </button>
+            {/* Quick actions */}
+            <div className="bg-white rounded-2xl p-2 shadow-sm border border-gray-100 mb-4 space-y-1">
                <button
                   onClick={async () => {
                     await subscribeWebPushWithWorker();
@@ -190,6 +184,16 @@ const Sidebar: React.FC<SidebarProps> = ({
                   className="w-full flex items-center gap-3 px-4 py-3 text-blue-700 hover:bg-blue-50 rounded-xl transition-colors font-medium text-sm"
                >
                   <Bell size={18} /> <span>Test thông báo từ Cloudflare Worker</span>
+               </button>
+            </div>
+
+            {/* Mobile-only buttons */}
+            <div className="bg-white rounded-2xl p-2 shadow-sm border border-gray-100 lg:hidden mb-4 space-y-1">
+               <button 
+                  onClick={handleRequestNotification}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-xl transition-colors font-medium text-sm"
+               >
+                  <Bell size={18} /> <span>Bật thông báo</span>
                </button>
                <button 
                   onClick={() => { onOpenSettings(); onClose(); }}
