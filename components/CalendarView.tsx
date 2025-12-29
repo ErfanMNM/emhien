@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { CalendarData, CalendarEvent, CalendarDay, ThemeColor } from '../types';
-import { getEventStyle, isVideoConference, shouldHideEvent, formatDate, getThemeColors, cleanHtml } from '../utils';
+import { getEventStyle, isVideoConference, shouldHideEvent, formatDate, getThemeColors, cleanHtml, getLunarDayInfoBatch, LunarDayInfo } from '../utils';
 import { Video, ChevronRight, Calendar as CalendarIcon, ChevronLeft, ChevronRight as ChevronRightIcon, Clock, MapPin, CheckCircle2 } from 'lucide-react';
 
 interface CalendarViewProps {
@@ -35,10 +35,33 @@ const CalendarView: React.FC<CalendarViewProps> = ({
 
   const [activePeriodIndex, setActivePeriodIndex] = useState(0);
   const [selectedTimestamp, setSelectedTimestamp] = useState<number | null>(null);
+  const [lunarInfoMap, setLunarInfoMap] = useState<Map<number, LunarDayInfo>>(new Map());
   const theme = getThemeColors(themeColor);
 
   const activePeriodName = periodNames[activePeriodIndex];
   const activeData = periods[activePeriodName];
+
+  // Load thông tin lịch âm cho các ngày trong tháng hiện tại
+  useEffect(() => {
+    if (!activeData) return;
+
+    const timestamps: number[] = [];
+    activeData.weeks.forEach(week => {
+      week.days.forEach(day => {
+        if (day.mday && day.timestamp) {
+          timestamps.push(day.timestamp);
+        }
+      });
+    });
+
+    if (timestamps.length > 0) {
+      getLunarDayInfoBatch(timestamps).then(infoMap => {
+        setLunarInfoMap(infoMap);
+      }).catch(err => {
+        console.error('[CalendarView] Lỗi load lịch âm:', err);
+      });
+    }
+  }, [activePeriodIndex, activeData]);
 
   useEffect(() => {
     // Tìm ngày hôm nay trong period hiện tại nếu có
@@ -123,11 +146,38 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                     {week.days.map((day: CalendarDay) => {
                         const displayEvents = (filteredCourseId === 'all' ? day.events : day.events.filter(e => e.course.id.toString() === filteredCourseId)).filter(e => !shouldHideEvent(e)).filter(e => showCompleted || !completedEvents.has(e.id));
                         const isSelected = selectedTimestamp === day.timestamp;
+                        const lunarInfo = lunarInfoMap.get(day.timestamp);
+                        
+                        // Xác định màu khung dựa trên ngày tốt/xấu
+                        let borderColor = '';
+                        if (lunarInfo) {
+                          if (lunarInfo.isGoodDay === true) {
+                            borderColor = 'border-green-400 border-2'; // Ngày tốt - xanh lá
+                          } else if (lunarInfo.isGoodDay === false) {
+                            borderColor = 'border-purple-400 border-2'; // Ngày xấu - tím
+                          }
+                        }
+                        
                         return (
-                            <div key={day.timestamp} onClick={() => setSelectedTimestamp(day.timestamp)} className={`relative min-h-[4rem] sm:min-h-[6rem] p-1 transition-all cursor-pointer group flex flex-col items-center hover:bg-gray-50 rounded-lg mx-0.5`}>
+                            <div key={day.timestamp} onClick={() => setSelectedTimestamp(day.timestamp)} className={`relative min-h-[4rem] sm:min-h-[6rem] p-1 transition-all cursor-pointer group flex flex-col items-center hover:bg-gray-50 rounded-lg mx-0.5 ${borderColor}`}>
                                 <div className="mb-1 mt-1">
                                     <span className={`text-xs sm:text-sm font-medium w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-full ${day.istoday ? `${theme.bg} text-white` : isSelected ? `${theme.bgMedium} ${theme.textDark} font-bold` : 'text-gray-700'}`}>{day.mday}</span>
                                 </div>
+                                {/* Hiển thị ngày âm lịch và indicator tốt/xấu */}
+                                {lunarInfo && (
+                                  <div className="flex flex-col items-center gap-0.5 mb-0.5">
+                                    {lunarInfo.lunarDate && (
+                                      <div className="text-[8px] sm:text-[9px] text-gray-500 font-medium">
+                                        {lunarInfo.lunarDate.split('-')[0]}/{lunarInfo.lunarDate.split('-')[1]}
+                                      </div>
+                                    )}
+                                    {lunarInfo.isGoodDay !== null && (
+                                      <div className={`w-1.5 h-1.5 rounded-full ${
+                                        lunarInfo.isGoodDay ? 'bg-green-400' : 'bg-purple-400'
+                                      }`} title={lunarInfo.isGoodDay ? 'Ngày tốt' : 'Ngày xấu'}></div>
+                                    )}
+                                  </div>
+                                )}
                                 {/* Mobile View: Colored Dots */}
                                 <div className="sm:hidden flex gap-1 w-full justify-center flex-wrap px-1">
                                     {displayEvents.slice(0, 3).map((e) => {

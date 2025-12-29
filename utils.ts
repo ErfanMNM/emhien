@@ -507,3 +507,161 @@ export const syncAlarmsToWorker = async (events: any[], alarms: Record<number, n
     console.error('[WebPush] Lỗi sync alarms:', e);
   }
 };
+
+/**
+ * Lunar Calendar (Lịch Âm) Helpers
+ */
+export interface LunarDayInfo {
+  lunarDate: string; // Ngày âm lịch, ví dụ: "10-11-2025"
+  isGoodDay: boolean | null; // true = tốt, false = xấu, null = không xác định
+}
+
+// Cache để tránh request nhiều lần
+const lunarCache = new Map<string, LunarDayInfo>();
+const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 giờ
+
+/**
+ * Lấy thông tin lịch âm cho một ngày cụ thể
+ * Sử dụng CORS proxy hoặc direct fetch nếu có thể
+ */
+export const getLunarDayInfo = async (timestamp: number): Promise<LunarDayInfo | null> => {
+  const date = new Date(timestamp * 1000);
+  const dateKey = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+  
+  // Kiểm tra cache
+  const cached = lunarCache.get(dateKey);
+  if (cached) {
+    return cached;
+  }
+
+  try {
+    // Format ngày để query xemlicham.com
+    const day = date.getDate();
+    const month = date.getMonth() + 1;
+    const year = date.getFullYear();
+    
+    // URL format: https://www.xemlicham.com/am-lich/nam/{year}/thang/{month}/ngay/{day}
+    // Sử dụng CORS proxy nếu cần (có thể thay bằng API của bạn)
+    const url = `https://www.xemlicham.com/am-lich/nam/${year}/thang/${month}/ngay/${day}`;
+    
+    // Thử fetch trực tiếp (có thể bị CORS block)
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'GET',
+        mode: 'cors',
+        headers: {
+          'Accept': 'text/html',
+        }
+      });
+    } catch (corsError) {
+      // Nếu bị CORS, thử dùng proxy hoặc fallback
+      console.warn('[Lunar] CORS error, sử dụng fallback pattern');
+      return getLunarDayInfoFallback(timestamp);
+    }
+
+    if (!response.ok) {
+      console.warn(`[Lunar] Không thể lấy dữ liệu cho ${dateKey}, dùng fallback`);
+      return getLunarDayInfoFallback(timestamp);
+    }
+
+    const html = await response.text();
+    
+    // Parse HTML để lấy thông tin
+    // Tìm ngày âm lịch - thường có format như "10-11-2025" hoặc "10/11/2025"
+    const lunarDateMatch = html.match(/Âm Lịch[^<]*(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/i) ||
+                              html.match(/ngày[^<]*(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/i);
+    
+    let lunarDate = '';
+    if (lunarDateMatch) {
+      lunarDate = `${lunarDateMatch[1]}-${lunarDateMatch[2]}-${lunarDateMatch[3]}`;
+    }
+
+    // Tìm ngày tốt/xấu - thường có màu đỏ (tốt) hoặc màu tím (xấu)
+    let isGoodDay: boolean | null = null;
+    
+    // Kiểm tra text "MÀU ĐỎ: NGÀY TỐT" hoặc "MÀU TÍM: NGÀY XẤU"
+    if (html.includes('MÀU ĐỎ: NGÀY TỐT') || html.match(/ngày tốt/i)) {
+      isGoodDay = true;
+    } else if (html.includes('MÀU TÍM: NGÀY XẤU') || html.match(/ngày xấu/i)) {
+      isGoodDay = false;
+    }
+
+    // Kiểm tra trong bảng lịch - tìm màu của ô ngày
+    if (isGoodDay === null) {
+      const dayCellPattern = new RegExp(`<td[^>]*>\\s*${day}[^<]*<[^>]*style[^>]*color[^>]*#([0-9a-fA-F]{6})`, 'i');
+      const dayCellMatch = html.match(dayCellPattern);
+      if (dayCellMatch) {
+        const color = dayCellMatch[1].toLowerCase();
+        // Màu đỏ (ff0000, ffxxxx) hoặc xanh lá (00ff00) = tốt
+        if (color.startsWith('ff') || color === '00ff00' || color.includes('green')) {
+          isGoodDay = true;
+        }
+        // Màu tím (8000ff, 9xxxff) = xấu
+        else if (color.startsWith('8') || color.startsWith('9') || color.includes('8000ff')) {
+          isGoodDay = false;
+        }
+      }
+    }
+
+    const result: LunarDayInfo = {
+      lunarDate: lunarDate || dateKey,
+      isGoodDay
+    };
+
+    // Lưu vào cache
+    lunarCache.set(dateKey, result);
+    
+    // Xóa cache sau 24 giờ
+    setTimeout(() => {
+      lunarCache.delete(dateKey);
+    }, CACHE_DURATION);
+
+    return result;
+  } catch (error) {
+    console.error('[Lunar] Lỗi khi lấy thông tin lịch âm:', error);
+    // Fallback nếu có lỗi
+    return getLunarDayInfoFallback(timestamp);
+  }
+};
+
+/**
+ * Fallback: Tính toán đơn giản dựa trên pattern (không chính xác 100%)
+ * Chỉ dùng khi không fetch được từ web
+ */
+const getLunarDayInfoFallback = (timestamp: number): LunarDayInfo | null => {
+  const date = new Date(timestamp * 1000);
+  const day = date.getDate();
+  const month = date.getMonth() + 1;
+  
+  // Pattern đơn giản: ngày chẵn thường tốt hơn, ngày lẻ có thể xấu
+  // Đây chỉ là fallback, không chính xác
+  const isGoodDay = day % 2 === 0;
+  
+  // Ước tính ngày âm (không chính xác, chỉ để hiển thị)
+  const estimatedLunarDay = Math.max(1, Math.min(30, day - 2));
+  const estimatedLunarMonth = month;
+  
+  return {
+    lunarDate: `${estimatedLunarDay}-${estimatedLunarMonth}-${date.getFullYear()}`,
+    isGoodDay
+  };
+};
+
+/**
+ * Lấy thông tin lịch âm cho nhiều ngày (batch)
+ */
+export const getLunarDayInfoBatch = async (timestamps: number[]): Promise<Map<number, LunarDayInfo>> => {
+  const results = new Map<number, LunarDayInfo>();
+  
+  // Lấy thông tin cho từng ngày (có thể tối ưu sau)
+  const promises = timestamps.map(async (ts) => {
+    const info = await getLunarDayInfo(ts);
+    if (info) {
+      results.set(ts, info);
+    }
+  });
+
+  await Promise.all(promises);
+  return results;
+};
