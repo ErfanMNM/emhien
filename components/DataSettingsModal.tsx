@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { X, AlertTriangle, FileUp, Save, Palette, Check, Loader2, Calendar, Download, Upload, Database, Cloud, CloudUpload, CloudDownload, LogIn, RefreshCw, Clock, Activity } from 'lucide-react';
+import { X, AlertTriangle, FileUp, Save, Palette, Check, Loader2, Calendar, Download, Upload, Database, Cloud, CloudUpload, CloudDownload, LogIn, RefreshCw, Clock, Activity, BellRing } from 'lucide-react';
 import { CalendarData, ThemeColor } from '../types';
-import { getThemeColors } from '../utils';
+import { getThemeColors, sendNotification, requestNotificationPermission } from '../utils';
 import { exportDBFile, importDBFile, getDBBinary } from '../lib/db';
 import { auth, storage } from '../lib/firebase';
 import { ref, uploadBytes, getDownloadURL, deleteObject, getMetadata } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js';
@@ -59,13 +59,11 @@ const DataSettingsModal: React.FC<DataSettingsModalProps> = ({
       setIsNewSchedule(false);
       setUser(auth.currentUser);
       
-      // Load local sync time
       const savedSync = localStorage.getItem(LS_KEY_SYNC);
       if (savedSync) {
           setLocalLastSync(new Date(savedSync));
       }
       
-      // Auto check if logged in
       if (auth.currentUser) {
           checkCloudStatus();
       }
@@ -82,7 +80,7 @@ const DataSettingsModal: React.FC<DataSettingsModalProps> = ({
           const storageRef = ref(storage, `backups/${currentUser.uid}/study_data.sqlite`);
           const metadata = await getMetadata(storageRef);
           
-          const cloudTime = new Date(metadata.updated); // hoặc timeCreated
+          const cloudTime = new Date(metadata.updated);
           setCloudLastModified(cloudTime);
           
           const localTime = localStorage.getItem(LS_KEY_SYNC);
@@ -90,7 +88,6 @@ const DataSettingsModal: React.FC<DataSettingsModalProps> = ({
           if (!localTime) {
               setHasNewerVersion(true);
           } else {
-              // Nếu thời gian trên cloud mới hơn thời gian sync lần cuối > 5 giây (trừ hao độ trễ mạng)
               if (cloudTime.getTime() > new Date(localTime).getTime() + 5000) {
                   setHasNewerVersion(true);
               } else {
@@ -106,8 +103,21 @@ const DataSettingsModal: React.FC<DataSettingsModalProps> = ({
           }
       } finally {
           setIsCheckingCloud(false);
-          setLastCheckTime(new Date()); // Update last check time
+          setLastCheckTime(new Date());
       }
+  };
+
+  const handleTestNotification = async () => {
+    if (Notification.permission === 'denied') {
+        alert("Thông báo đang bị chặn. Vui lòng mở khóa trên thanh địa chỉ.");
+        return;
+    }
+    const granted = await requestNotificationPermission();
+    if (granted) {
+        sendNotification("Test thành công!", "Nếu bạn thấy thông báo này, tính năng nhắc nhở đang hoạt động tốt.", "https://aistudiocdn.com/lucide-react@^0.555.0/icons/graduation-cap.svg");
+    } else {
+        alert("Bạn chưa cấp quyền thông báo.");
+    }
   };
 
   if (!isOpen) return null;
@@ -172,7 +182,7 @@ const DataSettingsModal: React.FC<DataSettingsModalProps> = ({
       localStorage.setItem(LS_KEY_SYNC, now.toISOString());
       setLocalLastSync(now);
       setHasNewerVersion(false);
-      checkCloudStatus(); // Re-check to update UI cleanly
+      checkCloudStatus();
   };
 
   const handleCloudUpload = async () => {
@@ -212,12 +222,10 @@ const DataSettingsModal: React.FC<DataSettingsModalProps> = ({
           const storageRef = ref(storage, `backups/${user.uid}/study_data.sqlite`);
           
           console.log("[Cloud Download] 1. Getting Download URL...");
-          // Lấy URL tải xuống
           const url = await getDownloadURL(storageRef);
           console.log("[Cloud Download] URL obtained:", url);
           
           try {
-             // Thử tải trực tiếp (có thể lỗi CORS)
              console.log("[Cloud Download] 2. Attempting fetch...");
              const response = await fetch(url);
              if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
@@ -237,16 +245,6 @@ const DataSettingsModal: React.FC<DataSettingsModalProps> = ({
           } catch (fetchErr: any) {
              console.warn("[Cloud Download] Auto-fetch failed (CORS likely). Switching to manual download.", fetchErr);
              
-             // Hướng dẫn fix CORS cho Developer trong Console
-             const bucketName = storage.app.options.storageBucket;
-             console.group("⚠️ CẤU HÌNH CORS CHO FIREBASE STORAGE");
-             console.log("Lỗi này xảy ra do Firebase chặn tải file từ tên miền khác (CORS).");
-             console.log("Để khắc phục triệt để, hãy COPY và CHẠY lệnh sau trong Google Cloud Shell:");
-             // Sử dụng lệnh echo để tạo file cors.json luôn, tránh lỗi "No such file"
-             console.log(`%cecho '[{"origin": ["*"], "method": ["GET"], "maxAgeSeconds": 3600}]' > cors.json && gsutil cors set cors.json gs://${bucketName}`, "color: #2563eb; font-weight: bold; padding: 4px; background: #eff6ff; border-radius: 4px;");
-             console.groupEnd();
-             
-             // Fallback: Tự động tải file về máy người dùng
              const a = document.createElement('a');
              a.href = url;
              a.target = '_blank';
@@ -289,6 +287,26 @@ const DataSettingsModal: React.FC<DataSettingsModalProps> = ({
         </div>
 
         <div className="p-6 overflow-y-auto flex-1 space-y-8">
+          
+          {/* Notification Test Section */}
+          <section className="bg-blue-50 p-4 rounded-2xl border border-blue-100 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                  <div className="bg-blue-100 p-2 rounded-xl text-blue-600">
+                      <BellRing size={20} />
+                  </div>
+                  <div>
+                      <h3 className="font-bold text-gray-800 text-sm">Kiểm tra thông báo</h3>
+                      <p className="text-[10px] text-gray-500">Gửi một thông báo thử nghiệm</p>
+                  </div>
+              </div>
+              <button 
+                onClick={handleTestNotification}
+                className="px-4 py-2 bg-white text-blue-600 font-bold text-xs rounded-xl shadow-sm border border-blue-200 hover:bg-blue-50"
+              >
+                  Gửi Test
+              </button>
+          </section>
+
           {/* Section: Themes */}
           <section>
             <div className="flex items-center gap-2 mb-4"><div className={`${theme.bgMedium} p-2 rounded-lg ${theme.textDark}`}><Palette size={18} /></div><h3 className="font-bold text-gray-800">Chủ đề</h3></div>

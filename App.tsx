@@ -12,9 +12,10 @@ import MobileBottomNav from './components/MobileBottomNav';
 import AuthPage from './components/AuthPage';
 import HeartsBackground from './components/HeartsBackground';
 import UIKit from './components/UIKit';
+import AlarmRingingModal from './components/AlarmRingingModal';
 import { CalendarEvent, Course, CalendarData, ScheduleMetadata, ThemeColor, AppView, MultiMonthData } from './types';
-import { filterEventsByCourse, shouldHideEvent, requestNotificationPermission, getThemeColors } from './utils';
-import { initDB, getSchedulesFromDB, getFullScheduleData, saveScheduleToDB, updateEventMetaInDB, deletePersonalEventFromDB } from './lib/db';
+import { filterEventsByCourse, shouldHideEvent, requestNotificationPermission, getThemeColors, sendNotification } from './utils';
+import { initDB, getSchedulesFromDB, getFullScheduleData, saveScheduleToDB, updateEventMetaInDB, deletePersonalEventFromDB, markEventAsNotified } from './lib/db';
 import { auth } from './lib/firebase';
 import { onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
 
@@ -29,6 +30,7 @@ const App: React.FC = () => {
   const [completedEvents, setCompletedEvents] = useState<Set<number>>(new Set());
   const [personalEvents, setPersonalEvents] = useState<CalendarEvent[]>([]);
   const [alarms, setAlarms] = useState<Record<number, number>>({});
+  const [notifiedEvents, setNotifiedEvents] = useState<Set<number>>(new Set());
   
   const [themeColor, setThemeColor] = useState<ThemeColor>('blue');
   const theme = getThemeColors(themeColor);
@@ -43,6 +45,8 @@ const App: React.FC = () => {
   const [view, setView] = useState<AppView>('weekly');
   const [selectedCourse, setSelectedCourse] = useState<string>('all');
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  const [ringingEvent, setRingingEvent] = useState<CalendarEvent | null>(null);
+
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isAddEventOpen, setIsAddEventOpen] = useState(false);
@@ -50,7 +54,6 @@ const App: React.FC = () => {
   useEffect(() => {
     init();
     
-    // Firebase Auth Observer
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
         setUser(firebaseUser);
     });
@@ -99,6 +102,7 @@ const App: React.FC = () => {
         setPersonalEvents(fullData.personalEvents);
         setCompletedEvents(new Set(fullData.completed));
         setAlarms(fullData.alarms);
+        setNotifiedEvents(new Set(fullData.notifiedEvents));
     } else {
         setMultiMonthData(null);
         setCurrentScheduleId(null);
@@ -106,18 +110,74 @@ const App: React.FC = () => {
     setSelectedCourse('all');
   };
 
+  const allEvents = useMemo(() => {
+    if (!multiMonthData) return [];
+    const events: CalendarEvent[] = [];
+    (Object.values(multiMonthData.periods) as CalendarData[]).forEach((period: CalendarData) => {
+        period.weeks.forEach(week => {
+            week.days.forEach(day => {
+                if (day.hasevents) {
+                    const visibleEvents = day.events.filter(e => !shouldHideEvent(e));
+                    events.push(...visibleEvents);
+                }
+            });
+        });
+    });
+    events.push(...personalEvents);
+    const uniqueEvents = new Map<number, CalendarEvent>();
+    events.forEach(e => { if (!uniqueEvents.has(e.id)) uniqueEvents.set(e.id, e); });
+    return Array.from(uniqueEvents.values()).sort((a, b) => a.timestart - b.timestart);
+  }, [multiMonthData, personalEvents]);
+
+  // --- ALARM CHECK LOGIC ---
+  useEffect(() => {
+    const checkAlarms = () => {
+        if (allEvents.length === 0) return;
+        
+        const now = Math.floor(Date.now() / 1000);
+        
+        allEvents.forEach(event => {
+            const alarmMins = alarms[event.id];
+            if (alarmMins === undefined || alarmMins === null) return;
+            
+            // Nếu đã thông báo rồi thì bỏ qua
+            if (notifiedEvents.has(event.id)) return;
+            
+            const triggerTime = event.timestart - (alarmMins * 60);
+            
+            // Logic kích hoạt: 
+            // 1. Thời gian hiện tại >= Thời gian kích hoạt
+            // 2. Thời gian hiện tại chưa vượt quá thời gian bắt đầu sự kiện (để tránh báo các sự kiện quá cũ khi mới mở app)
+            // 3. Hoặc nếu "Đúng giờ" (alarmMins == 0) thì cho phép trễ 5 phút
+            if (now >= triggerTime && now <= event.timestart + 300) {
+                 triggerAlarm(event);
+            }
+        });
+    };
+
+    const interval = setInterval(checkAlarms, 10000); // Check every 10 seconds
+    return () => clearInterval(interval);
+  }, [allEvents, alarms, notifiedEvents]);
+
+  const triggerAlarm = (event: CalendarEvent) => {
+      // 1. Show UI Modal
+      setRingingEvent(event);
+      
+      // 2. Browser Notification
+      const mins = alarms[event.id];
+      const body = mins === 0 
+          ? `Sự kiện "${event.activityname}" đang bắt đầu!` 
+          : `Sắp diễn ra: "${event.activityname}" trong ${mins} phút nữa.`;
+      sendNotification("LMS Scheduler", body, event.icon.iconurl);
+
+      // 3. Mark as notified in DB & State to prevent re-ring
+      markEventAsNotified(event.id);
+      setNotifiedEvents(prev => new Set(prev).add(event.id));
+  };
+
   const handleSetTheme = (color: ThemeColor) => {
       setThemeColor(color);
       localStorage.setItem(LS_KEY_THEME, color);
-  };
-
-  const handleLogout = async () => {
-      try {
-          await signOut(auth);
-          setUser(null);
-      } catch (e) {
-          console.error("Logout error", e);
-      }
   };
 
   const handleImportSchedule = async (newData: CalendarData, name: string, isNew: boolean) => {
@@ -163,6 +223,18 @@ const App: React.FC = () => {
           if (mins === null) delete next[id]; else next[id] = mins;
           const isComp = completedEvents.has(id);
           updateEventMetaInDB(id, isComp, mins);
+          
+          // Reset notified status if user changes alarm
+          if (notifiedEvents.has(id)) {
+              setNotifiedEvents(prev => {
+                  const nextNotify = new Set(prev);
+                  nextNotify.delete(id);
+                  return nextNotify;
+              });
+              // Note: We don't clear last_notified_at in DB here to keep history, 
+              // but purely for logic, re-setting alarm implies wanting to be notified again.
+          }
+          
           return next;
       });
   };
@@ -187,25 +259,6 @@ const App: React.FC = () => {
       deletePersonalEventFromDB(id);
       if (currentScheduleId) saveScheduleToDB(currentScheduleId, currentScheduleName, multiMonthData, nextPersonal);
   };
-
-  const allEvents = useMemo(() => {
-    if (!multiMonthData) return [];
-    const events: CalendarEvent[] = [];
-    (Object.values(multiMonthData.periods) as CalendarData[]).forEach((period: CalendarData) => {
-        period.weeks.forEach(week => {
-            week.days.forEach(day => {
-                if (day.hasevents) {
-                    const visibleEvents = day.events.filter(e => !shouldHideEvent(e));
-                    events.push(...visibleEvents);
-                }
-            });
-        });
-    });
-    events.push(...personalEvents);
-    const uniqueEvents = new Map<number, CalendarEvent>();
-    events.forEach(e => { if (!uniqueEvents.has(e.id)) uniqueEvents.set(e.id, e); });
-    return Array.from(uniqueEvents.values()).sort((a, b) => a.timestart - b.timestart);
-  }, [multiMonthData, personalEvents]);
 
   const filteredEvents = useMemo(() => filterEventsByCourse(allEvents, selectedCourse), [allEvents, selectedCourse]);
 
@@ -241,12 +294,10 @@ const App: React.FC = () => {
         <header className="bg-white/90 backdrop-blur-md shrink-0 z-30 px-4 py-3 border-b border-gray-100 transition-all sticky top-0">
             <div className="flex justify-between items-center max-w-5xl mx-auto">
                 <div className="flex items-center gap-3">
-                    {/* Only show logo on Desktop, Sidebar toggle handled by Bottom Nav on Mobile */}
                     <div className="hidden lg:flex items-center gap-3">
                         <div className={`p-2 rounded-xl text-white shadow-sm ${theme.bg}`}><GraduationCap size={24} /></div>
                     </div>
                     <div>
-                         {/* Mobile Heading Style */}
                         <h1 className="text-xl sm:text-2xl font-bold text-gray-800 tracking-tight flex flex-col sm:flex-row sm:items-center sm:gap-2 leading-none sm:leading-normal">
                            <span>LMS Scheduler</span>
                            {!isOnline && <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded uppercase w-fit mt-1 sm:mt-0"><WifiOff size={10} className="inline mr-1"/>Offline</span>}
@@ -270,14 +321,12 @@ const App: React.FC = () => {
                         </button>
                     )}
                     
-                    {/* Desktop View Switcher */}
                     <div className="hidden lg:flex bg-gray-100/50 p-1 rounded-full border border-gray-200">
                         <button onClick={() => setView('weekly')} disabled={!multiMonthData} className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all flex items-center gap-2 ${view === 'weekly' ? `bg-white ${theme.textDark} shadow-sm` : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'}`}><Clock size={16} /> Tuần</button>
                         <button onClick={() => setView('calendar')} disabled={!multiMonthData} className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all flex items-center gap-2 ${view === 'calendar' ? `bg-white ${theme.textDark} shadow-sm` : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'}`}><CalendarIcon size={16} /> Lịch</button>
                         <button onClick={() => setView('list')} disabled={!multiMonthData} className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all flex items-center gap-2 ${view === 'list' ? `bg-white ${theme.textDark} shadow-sm` : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'}`}><ListIcon size={16} /> DS</button>
                     </div>
 
-                    {/* Settings Button (Desktop Only) */}
                     <button onClick={() => setIsSettingsOpen(true)} className={`hidden lg:block p-2.5 text-gray-500 ${theme.text} ${theme.bgLight} rounded-full transition-colors`}><Settings size={20} /></button>
                 </div>
             </div>
@@ -296,7 +345,6 @@ const App: React.FC = () => {
                     {/* Filter Bar */}
                     <div className="px-4 sm:px-0 mb-4 sm:mb-6">
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                           {/* Filter Dropdown */}
                             <div className="relative w-full sm:w-[280px] group">
                                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400"><Filter size={18} /></div>
                                 <select 
@@ -310,7 +358,6 @@ const App: React.FC = () => {
                                 </select>
                             </div>
 
-                            {/* Show Completed Toggle */}
                              <button 
                                 onClick={() => setShowCompleted(!showCompleted)} 
                                 className={`flex items-center justify-center gap-2 px-4 py-3 rounded-2xl text-sm font-bold border transition-all shadow-sm w-full sm:w-auto
@@ -336,7 +383,6 @@ const App: React.FC = () => {
             )}
         </main>
 
-        {/* Floating Action Button (Mobile) */}
         <button
             onClick={() => setIsAddEventOpen(true)}
             className={`fixed right-4 bottom-20 lg:bottom-8 lg:right-8 w-14 h-14 rounded-2xl ${theme.bg} text-white shadow-lg ${theme.shadow} flex items-center justify-center z-40 transition-transform active:scale-90 hover:scale-105`}
@@ -345,13 +391,23 @@ const App: React.FC = () => {
             <Plus size={32} />
         </button>
 
-        {/* Bottom Navigation (Mobile) */}
         <MobileBottomNav 
             currentView={view} 
             onChangeView={setView} 
             onOpenMenu={() => setIsSidebarOpen(true)}
             themeColor={themeColor}
         />
+
+        {ringingEvent && (
+            <AlarmRingingModal 
+                event={ringingEvent} 
+                onDismiss={() => setRingingEvent(null)}
+                onSnooze={() => {
+                    handleSetAlarm(ringingEvent.id, 5); // Snooze for 5 minutes
+                    setRingingEvent(null);
+                }}
+            />
+        )}
 
         <EventModal event={selectedEvent} isCompleted={selectedEvent ? completedEvents.has(selectedEvent.id) : false} alarmMinutes={selectedEvent ? (alarms[selectedEvent.id] !== undefined ? alarms[selectedEvent.id] : null) : null} onToggleComplete={toggleEventCompletion} onSetAlarm={handleSetAlarm} onDelete={handleDeletePersonalEvent} onClose={() => setSelectedEvent(null)} themeColor={themeColor} />
         <AddPersonalEventModal isOpen={isAddEventOpen} onClose={() => setIsAddEventOpen(false)} onAdd={handleAddPersonalEvent} />

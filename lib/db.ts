@@ -154,14 +154,16 @@ export const getFullScheduleData = (id: string) => {
     const peRes = db.exec(`SELECT data FROM personal_events WHERE schedule_id = ?`, [id]);
     const personalEvents = peRes.length > 0 ? peRes[0].values.map((v: any) => JSON.parse(v[0])) : [];
 
-    const metaRes = db.exec(`SELECT event_id, is_completed, alarm_minutes FROM event_meta`);
+    const metaRes = db.exec(`SELECT event_id, is_completed, alarm_minutes, last_notified_at FROM event_meta`);
     const completed = new Set<number>();
     const alarms: Record<number, number> = {};
+    const notifiedEvents = new Set<number>();
     
     if (metaRes.length > 0) {
         metaRes[0].values.forEach((v: any) => {
             if (v[1] === 1) completed.add(v[0]);
             if (v[2] !== null) alarms[v[0]] = v[2];
+            if (v[3] !== null) notifiedEvents.add(v[0]);
         });
     }
 
@@ -169,7 +171,8 @@ export const getFullScheduleData = (id: string) => {
         multiMonth: { periods, lastUpdatedPeriod: Object.keys(periods)[0] || '' },
         personalEvents,
         completed: Array.from(completed),
-        alarms
+        alarms,
+        notifiedEvents: Array.from(notifiedEvents)
     };
 };
 
@@ -198,14 +201,23 @@ export const saveScheduleToDB = (id: string, name: string, multiMonth: MultiMont
 export const updateEventMetaInDB = (eventId: number, isCompleted: boolean, alarmMinutes: number | null) => {
     if (!db) return;
     
-    const res = db.exec("SELECT event_id FROM event_meta WHERE event_id = ?", [eventId]);
+    // Check if exists to preserve last_notified_at
+    const res = db.exec("SELECT last_notified_at FROM event_meta WHERE event_id = ?", [eventId]);
+    let lastNotified = null;
     if (res.length > 0) {
-        db.run("UPDATE event_meta SET is_completed = ?, alarm_minutes = ? WHERE event_id = ?", 
-            [isCompleted ? 1 : 0, alarmMinutes, eventId]);
-    } else {
-        db.run("INSERT INTO event_meta (event_id, is_completed, alarm_minutes) VALUES (?, ?, ?)", 
-            [eventId, isCompleted ? 1 : 0, alarmMinutes]);
+        lastNotified = res[0].values[0][0];
     }
+    
+    db.run("INSERT OR REPLACE INTO event_meta (event_id, is_completed, alarm_minutes, last_notified_at) VALUES (?, ?, ?, ?)", 
+        [eventId, isCompleted ? 1 : 0, alarmMinutes, lastNotified]);
+    persist();
+};
+
+export const markEventAsNotified = (eventId: number) => {
+    if (!db) return;
+    const now = Math.floor(Date.now() / 1000);
+    // Only update last_notified_at, keep others
+    db.run("UPDATE event_meta SET last_notified_at = ? WHERE event_id = ?", [now, eventId]);
     persist();
 };
 

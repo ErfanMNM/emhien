@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { CalendarEvent, ThemeColor } from '../types';
-import { X, ExternalLink, Calendar, Clock, BookOpen, Video, CheckCircle2, Circle, Bell, BellRing, BellOff, Trash2 } from 'lucide-react';
+import { X, ExternalLink, Calendar, BookOpen, Video, CheckCircle2, Circle, Bell, Trash2, Settings } from 'lucide-react';
 import { formatDate, isVideoConference, requestNotificationPermission, getThemeColors, cleanHtml } from '../utils';
 
 interface EventModalProps {
@@ -25,7 +25,6 @@ const EventModal: React.FC<EventModalProps> = ({
   onClose,
   themeColor
 }) => {
-  const [showAlarmOptions, setShowAlarmOptions] = useState(false);
   const theme = getThemeColors(themeColor);
 
   if (!event) return null;
@@ -34,29 +33,44 @@ const EventModal: React.FC<EventModalProps> = ({
   const isPersonal = event.isPersonal;
 
   const handleAlarmSelect = async (minutes: number | null) => {
+    // Nếu người dùng muốn đặt giờ (minutes khác null)
     if (minutes !== null && onSetAlarm) {
+       // Kiểm tra xem trình duyệt có hỗ trợ không
+       if (!("Notification" in window)) {
+           alert("Trình duyệt của bạn không hỗ trợ thông báo.");
+           return;
+       }
+
+       // Kiểm tra nếu đã bị chặn trước đó
+       if (Notification.permission === 'denied') {
+           alert("⚠️ Quyền thông báo đang bị CHẶN.\n\nVui lòng bấm vào biểu tượng ổ khóa 🔒 trên thanh địa chỉ -> Tìm mục 'Thông báo' -> Chọn 'Cho phép' (Allow) để nhận nhắc nhở.");
+           return;
+       }
+
+       // Yêu cầu quyền
        const granted = await requestNotificationPermission();
        if (!granted) {
-           alert("Bạn cần cấp quyền thông báo để trình duyệt có thể phát âm thanh báo thức.");
+           // Người dùng vừa bấm "Block" hoặc tắt popup
            return;
        }
     }
+    
+    // Nếu đã có quyền hoặc đang tắt báo thức (minutes === null)
     if (onSetAlarm) {
         onSetAlarm(event.id, minutes);
-        setShowAlarmOptions(false);
     }
   };
 
   const getAlarmLabel = (minutes: number | null) => {
       if (minutes === null) return "Chưa đặt";
       if (minutes === 0) return "Đúng giờ";
-      if (minutes === 5) return "5 phút";
       if (minutes === 15) return "15 phút";
       if (minutes === 30) return "30 phút";
       if (minutes === 60) return "1 giờ";
-      if (minutes === 1440) return "1 ngày";
       return `${minutes} phút`;
   };
+
+  const alarmOptions = [0, 15, 30, 60];
 
   return (
     <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center sm:p-4 bg-black/40 backdrop-blur-sm transition-opacity">
@@ -108,7 +122,7 @@ const EventModal: React.FC<EventModalProps> = ({
                 {isVC ? <Video size={24} /> : <img src={event.icon.iconurl} alt="" className="w-6 h-6 object-contain opacity-80" />}
              </div>
              <div>
-                <h3 className={`text-2xl font-semibold leading-tight text-gray-900 ${isCompleted ? 'line-through text-gray-400' : ''}`}>
+                <h3 className={`text-xl sm:text-2xl font-semibold leading-tight text-gray-900 ${isCompleted ? 'line-through text-gray-400' : ''}`}>
                     {event.activityname}
                 </h3>
                 <span className="text-sm font-medium text-gray-500 mt-1 block">
@@ -138,29 +152,46 @@ const EventModal: React.FC<EventModalProps> = ({
 
           {/* Alarm Section */}
           {onSetAlarm && (
-            <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
-               <div className="flex items-center gap-3 mb-3">
-                   <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-orange-600">
-                      {alarmMinutes !== null ? <BellRing size={16} /> : <Bell size={16} />}
+            <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
+               <div className="flex items-center justify-between mb-4">
+                   <div className="flex items-center gap-3">
+                       <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-orange-600">
+                          <Bell size={16} />
+                       </div>
+                       <div className="flex flex-col">
+                           <span className="font-bold text-gray-700 leading-none">Thông báo</span>
+                           <span className="text-[10px] text-gray-400 mt-1">Trình duyệt sẽ nhắc bạn</span>
+                       </div>
                    </div>
-                   <span className="font-medium text-gray-700">Thông báo</span>
-                   <span className={`ml-auto text-sm ${theme.text} ${theme.bgLight} px-3 py-1 rounded-full font-medium`}>
+                   
+                   <span className={`text-xs font-bold px-3 py-1 rounded-full ${
+                       alarmMinutes !== null ? 'bg-green-100 text-green-700' : 'bg-red-50 text-red-500'
+                   }`}>
                        {getAlarmLabel(alarmMinutes)}
                    </span>
                </div>
                
-               <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+               <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
                    <button 
                     onClick={() => handleAlarmSelect(null)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${alarmMinutes === null ? 'bg-gray-800 text-white shadow-md' : 'bg-white text-gray-600 border border-gray-200'}`}
+                    className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap border
+                        ${alarmMinutes === null 
+                            ? 'bg-slate-800 text-white border-slate-800' 
+                            : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                        }`}
                    >
                        Tắt
                    </button>
-                   {[0, 15, 30, 60].map((mins) => (
+                   
+                   {alarmOptions.map((mins) => (
                        <button
                         key={mins}
                         onClick={() => handleAlarmSelect(mins)}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${alarmMinutes === mins ? 'bg-orange-500 text-white shadow-md' : 'bg-white text-gray-600 border border-gray-200'}`}
+                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap border
+                            ${alarmMinutes === mins 
+                                ? 'bg-orange-50 text-orange-600 border-orange-200 shadow-sm ring-2 ring-orange-100' 
+                                : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                            }`}
                        >
                            {getAlarmLabel(mins)}
                        </button>
@@ -172,7 +203,7 @@ const EventModal: React.FC<EventModalProps> = ({
           {/* Description */}
           {event.description && (
               <div 
-                className="text-sm text-gray-600 bg-gray-50/50 p-4 rounded-2xl border border-gray-100 prose max-w-none prose-sm prose-p:my-1"
+                className="text-sm text-gray-600 bg-gray-50 p-4 rounded-2xl border border-gray-100 prose max-w-none prose-sm prose-p:my-1 max-h-32 overflow-y-auto"
                 dangerouslySetInnerHTML={{ __html: event.description }}
              />
           )}

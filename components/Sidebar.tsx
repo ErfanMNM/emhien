@@ -11,11 +11,9 @@ interface SidebarProps {
   currentScheduleId: string | null;
   onSelectSchedule: (id: string) => void;
   onCreateNew: () => void;
-  // New props for mobile optimization
   onOpenSettings: () => void;
-  onRequestNotification: () => void;
+  onRequestNotification: () => Promise<boolean>; // Updated to return Promise
   onOpenUIKit?: () => void;
-  // Theme props
   themeColor: ThemeColor;
 }
 
@@ -33,6 +31,30 @@ const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   
   const theme = getThemeColors(themeColor);
+
+  const handleRequestNotification = async () => {
+      if (!("Notification" in window)) {
+          alert("Trình duyệt không hỗ trợ thông báo.");
+          return;
+      }
+
+      if (Notification.permission === 'granted') {
+          alert("✅ Bạn đã bật thông báo rồi!");
+          onClose();
+          return;
+      }
+
+      if (Notification.permission === 'denied') {
+          alert("⚠️ Quyền thông báo đã bị chặn.\n\nHãy bấm vào biểu tượng ổ khóa 🔒 trên thanh địa chỉ và bật 'Thông báo' (Notifications).");
+          return;
+      }
+
+      const granted = await onRequestNotification();
+      if (granted) {
+          alert("✅ Đã bật thông báo thành công!");
+          onClose();
+      }
+  };
 
   return (
     <>
@@ -124,7 +146,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             {/* Mobile-only buttons */}
             <div className="bg-white rounded-2xl p-2 shadow-sm border border-gray-100 lg:hidden mb-4">
                <button 
-                  onClick={() => { onRequestNotification(); onClose(); }}
+                  onClick={handleRequestNotification}
                   className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-xl transition-colors font-medium text-sm"
                >
                   <Bell size={18} /> <span>Bật thông báo</span>
