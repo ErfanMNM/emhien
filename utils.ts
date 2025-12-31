@@ -607,58 +607,67 @@ export const getLunarDayInfo = async (timestamp: number): Promise<LunarDayInfo |
       lunarDate = `${lunarDateMatch[1]}-${lunarDateMatch[2]}-${lunarDateMatch[3]}`;
     }
 
-    // Tìm ngày tốt/xấu - cải thiện logic parse
+    // Tìm ngày tốt/xấu - tìm class "dao xau", "dao tot", hoặc "dao"
     let isGoodDay: boolean | null = null;
     
-    // Kiểm tra text "MÀU ĐỎ: NGÀY TỐT" hoặc "MÀU TÍM: NGÀY XẤU" - tìm chính xác hơn
-    const goodDayPattern = /MÀU\s*ĐỎ[:\s]*NGÀY\s*TỐT|ngày\s*tốt/i;
-    const badDayPattern = /MÀU\s*TÍM[:\s]*NGÀY\s*XẤU|ngày\s*xấu/i;
+    // Tìm link chứa ngày hiện tại
+    const dayLinkPattern = new RegExp(`<a[^>]*href[^>]*ngay[/-]${day}[^>]*>`, 'i');
+    const dayLinkMatch = html.match(dayLinkPattern);
     
-    if (goodDayPattern.test(html)) {
-      isGoodDay = true;
-    } else if (badDayPattern.test(html)) {
-      isGoodDay = false;
-    }
-
-    // Kiểm tra trong bảng lịch - tìm link hoặc cell chứa ngày hiện tại
-    if (isGoodDay === null) {
-      // Tìm trong bảng lịch tháng - tìm link có chứa ngày
-      const dayLinkPattern = new RegExp(`<a[^>]*href[^>]*ngay[/-]${day}[^>]*>`, 'i');
-      const dayLinkMatch = html.match(dayLinkPattern);
+    if (dayLinkMatch) {
+      // Tìm context xung quanh link (trước và sau link) - khoảng 1500 ký tự
+      const linkIndex = html.indexOf(dayLinkMatch[0]);
+      const contextStart = Math.max(0, linkIndex - 1500);
+      const contextEnd = Math.min(html.length, linkIndex + 1500);
+      const context = html.substring(contextStart, contextEnd);
       
-      if (dayLinkMatch) {
-        // Tìm màu của link hoặc cell chứa link này
-        const linkIndex = html.indexOf(dayLinkMatch[0]);
-        const beforeLink = html.substring(Math.max(0, linkIndex - 500), linkIndex);
-        const afterLink = html.substring(linkIndex, Math.min(html.length, linkIndex + 500));
-        const context = beforeLink + afterLink;
-        
-        // Tìm màu trong context
-        const colorMatch = context.match(/color[^:]*:\s*#([0-9a-fA-F]{6})|color[^:]*:\s*(red|green|purple|violet)/i);
-        if (colorMatch) {
-          const color = colorMatch[1]?.toLowerCase() || colorMatch[2]?.toLowerCase();
-          if (color === 'red' || color === 'green' || (color && color.startsWith('ff'))) {
-            isGoodDay = true;
-          } else if (color === 'purple' || color === 'violet' || (color && (color.startsWith('8') || color.startsWith('9')))) {
-            isGoodDay = false;
+      // Tìm class "dao xau" (ngày xấu) hoặc "dao tot" (ngày tốt) trong context
+      // Pattern: class="dao xau" hoặc class="dao tot" hoặc class="dao"
+      // Hỗ trợ cả class="dao xau" và class='dao xau' và class=dao\s+xau
+      const daoXauPattern = /class\s*=\s*["']?[^"']*\bdao\s+xau\b[^"']*["']?/i;
+      const daoTotPattern = /class\s*=\s*["']?[^"']*\bdao\s+tot\b[^"']*["']?/i;
+      
+      // Tìm tất cả các match trong context
+      const xauMatches = [...context.matchAll(new RegExp(daoXauPattern.source, 'gi'))];
+      const totMatches = [...context.matchAll(new RegExp(daoTotPattern.source, 'gi'))];
+      
+      // Tìm vị trí của link trong context
+      const linkPosInContext = linkIndex - contextStart;
+      
+      // Tìm match gần link nhất
+      let nearestXau: number | null = null;
+      let nearestTot: number | null = null;
+      
+      xauMatches.forEach(match => {
+        if (match.index !== undefined) {
+          const distance = Math.abs(match.index - linkPosInContext);
+          if (nearestXau === null || distance < Math.abs(nearestXau - linkPosInContext)) {
+            nearestXau = match.index;
           }
         }
-      }
+      });
       
-      // Nếu vẫn chưa tìm thấy, thử tìm trong bảng lịch với pattern khác
-      if (isGoodDay === null) {
-        // Tìm cell có chứa ngày và có style màu
-        const cellPattern = new RegExp(`<td[^>]*>\\s*(<[^>]*>)*\\s*${day}\\s*(<[^>]*>)*[^<]*style[^>]*color[^:]*:([^;>]+)`, 'i');
-        const cellMatch = html.match(cellPattern);
-        if (cellMatch && cellMatch[3]) {
-          const colorValue = cellMatch[3].trim().toLowerCase();
-          if (colorValue.includes('red') || colorValue.includes('#ff') || colorValue.includes('green')) {
-            isGoodDay = true;
-          } else if (colorValue.includes('purple') || colorValue.includes('violet') || colorValue.includes('#8') || colorValue.includes('#9')) {
-            isGoodDay = false;
+      totMatches.forEach(match => {
+        if (match.index !== undefined) {
+          const distance = Math.abs(match.index - linkPosInContext);
+          if (nearestTot === null || distance < Math.abs(nearestTot - linkPosInContext)) {
+            nearestTot = match.index;
           }
         }
+      });
+      
+      // Quyết định dựa trên match gần nhất
+      if (nearestXau !== null && nearestTot !== null) {
+        // Có cả hai, chọn cái gần hơn
+        const xauDistance = Math.abs(nearestXau - linkPosInContext);
+        const totDistance = Math.abs(nearestTot - linkPosInContext);
+        isGoodDay = xauDistance < totDistance ? false : true;
+      } else if (nearestXau !== null) {
+        isGoodDay = false; // Ngày xấu
+      } else if (nearestTot !== null) {
+        isGoodDay = true; // Ngày tốt
       }
+      // Nếu không tìm thấy cả hai, isGoodDay vẫn là null (bình thường)
     }
 
     const result: LunarDayInfo = {
