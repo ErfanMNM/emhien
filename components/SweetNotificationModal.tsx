@@ -1,24 +1,26 @@
 
 import React, { useEffect, useState } from 'react';
 import { Heart, Sparkles, X } from 'lucide-react';
+import quotesData from '../quotes.json';
 
 interface SweetNotificationModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-const sweetMessages = [
-  "💕 Bé Hiền yêu dấu của anh Thức, anh yêu em nhiều lắm!",
-  "✨ Mỗi ngày bên em là một ngày hạnh phúc nhất của anh!",
-  "🌹 Em là ánh sáng trong cuộc đời anh, bé Hiền ơi!",
-  "💖 Anh cảm ơn em vì đã đến bên anh, bé yêu!",
-  "🌸 Em là điều tuyệt vời nhất mà anh từng có!",
-  "💝 Bé Hiền à, em làm trái tim anh đập nhanh hơn mỗi ngày!",
-  "🌺 Anh muốn nói với em rằng: Anh yêu em rất nhiều!",
-  "💐 Em là lý do anh thức dậy với nụ cười mỗi sáng!",
-  "💗 Bé Hiền yêu, em là kho báu quý giá nhất của anh!",
-  "🌷 Anh sẽ luôn ở bên em, bảo vệ và yêu thương em!",
-];
+interface Quote {
+  quote: string;
+  author: string;
+}
+
+// Format quotes thành messages với emoji và tác giả
+const formatQuote = (quote: Quote): string => {
+  const emojis = ['🚀', '💪', '⭐', '🔥', '✨', '🌟', '💎', '🎯', '⚡', '🌱', '🎓', '🏆', '💼', '📚', '🎨', '💡', '🎪', '🌈', '🌺', '🌸'];
+  const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
+  return `${randomEmoji} ${quote.quote} - ${quote.author}`;
+};
+
+const sweetMessages = (quotesData as Quote[]).map(formatQuote);
 
 interface SparkleData {
   left: number;
@@ -112,7 +114,7 @@ const SweetNotificationModal: React.FC<SweetNotificationModalProps> = ({ isOpen,
 
           {/* Title */}
           <h2 className="text-2xl font-bold bg-gradient-to-r from-pink-600 to-rose-600 bg-clip-text text-transparent mb-4">
-            💕 Gửi Bé Hiền Yêu Dấu 💕
+            💪 Câu Nói Truyền Cảm Hứng 💪
           </h2>
 
           {/* Message */}
@@ -131,7 +133,7 @@ const SweetNotificationModal: React.FC<SweetNotificationModalProps> = ({ isOpen,
 
           {/* Footer text */}
           <p className="mt-4 text-sm text-pink-600/70 font-medium">
-            Từ anh Thức với tình yêu ❤️
+            Nguồn: VietnamWorks HR Insider ✨
           </p>
         </div>
 
