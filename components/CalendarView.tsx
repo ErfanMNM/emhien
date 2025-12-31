@@ -148,24 +148,24 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                         const isSelected = selectedTimestamp === day.timestamp;
                         const lunarInfo = lunarInfoMap.get(day.timestamp);
                         
-                        // Xác định màu khung dựa trên ngày tốt/xấu
-                        let borderColor = '';
+                        // Xác định màu text của ngày âm dựa trên ngày tốt/xấu
+                        let lunarTextColor = 'text-gray-500'; // Mặc định
                         if (lunarInfo) {
                           if (lunarInfo.isGoodDay === true) {
-                            borderColor = 'border-green-400 border-2'; // Ngày tốt - xanh lá
+                            lunarTextColor = 'text-green-600 font-bold'; // Ngày tốt - xanh lá
                           } else if (lunarInfo.isGoodDay === false) {
-                            borderColor = 'border-purple-400 border-2'; // Ngày xấu - tím
+                            lunarTextColor = 'text-purple-600 font-bold'; // Ngày xấu - tím
                           }
                         }
                         
                         return (
-                            <div key={day.timestamp} onClick={() => setSelectedTimestamp(day.timestamp)} className={`relative min-h-[4rem] sm:min-h-[6rem] p-1 transition-all cursor-pointer group flex flex-col items-center hover:bg-gray-50 rounded-lg mx-0.5 ${borderColor}`}>
+                            <div key={day.timestamp} onClick={() => setSelectedTimestamp(day.timestamp)} className="relative min-h-[4rem] sm:min-h-[6rem] p-1 transition-all cursor-pointer group flex flex-col items-center hover:bg-gray-50 rounded-lg mx-0.5">
                                 <div className="mb-1 mt-1">
                                     <span className={`text-xs sm:text-sm font-medium w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-full ${day.istoday ? `${theme.bg} text-white` : isSelected ? `${theme.bgMedium} ${theme.textDark} font-bold` : 'text-gray-700'}`}>{day.mday}</span>
                                 </div>
                                 {/* Hiển thị ngày âm lịch */}
                                 {lunarInfo && lunarInfo.lunarDate && (
-                                  <div className="text-[8px] sm:text-[9px] text-gray-500 font-medium mb-0.5">
+                                  <div className={`text-[8px] sm:text-[9px] font-medium mb-0.5 ${lunarTextColor}`}>
                                     {lunarInfo.lunarDate.split('-')[0]}/{lunarInfo.lunarDate.split('-')[1]}
                                   </div>
                                 )}

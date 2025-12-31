@@ -607,67 +607,53 @@ export const getLunarDayInfo = async (timestamp: number): Promise<LunarDayInfo |
       lunarDate = `${lunarDateMatch[1]}-${lunarDateMatch[2]}-${lunarDateMatch[3]}`;
     }
 
-    // Tìm ngày tốt/xấu - tìm class "dao xau", "dao tot", hoặc "dao"
+    // Tìm ngày tốt/xấu - tìm class "dao xau", "dao tot" trong cùng thẻ <a> chứa link đến ngày
     let isGoodDay: boolean | null = null;
     
-    // Tìm link chứa ngày hiện tại
-    const dayLinkPattern = new RegExp(`<a[^>]*href[^>]*ngay[/-]${day}[^>]*>`, 'i');
+    // Tìm thẻ <a> chứa link đến ngày hiện tại
+    // Pattern: <a href="...ngay/31" ...> hoặc <a href="...ngay-31" ...>
+    const dayLinkPattern = new RegExp(`<a[^>]*href[^>]*ngay[/-]${day}(?:["'\\s>]|$)`, 'i');
     const dayLinkMatch = html.match(dayLinkPattern);
     
     if (dayLinkMatch) {
-      // Tìm context xung quanh link (trước và sau link) - khoảng 1500 ký tự
-      const linkIndex = html.indexOf(dayLinkMatch[0]);
-      const contextStart = Math.max(0, linkIndex - 1500);
-      const contextEnd = Math.min(html.length, linkIndex + 1500);
-      const context = html.substring(contextStart, contextEnd);
+      const linkStartIndex = html.indexOf(dayLinkMatch[0]);
       
-      // Tìm class "dao xau" (ngày xấu) hoặc "dao tot" (ngày tốt) trong context
-      // Pattern: class="dao xau" hoặc class="dao tot" hoặc class="dao"
-      // Hỗ trợ cả class="dao xau" và class='dao xau' và class=dao\s+xau
-      const daoXauPattern = /class\s*=\s*["']?[^"']*\bdao\s+xau\b[^"']*["']?/i;
-      const daoTotPattern = /class\s*=\s*["']?[^"']*\bdao\s+tot\b[^"']*["']?/i;
-      
-      // Tìm tất cả các match trong context
-      const xauMatches = [...context.matchAll(new RegExp(daoXauPattern.source, 'gi'))];
-      const totMatches = [...context.matchAll(new RegExp(daoTotPattern.source, 'gi'))];
-      
-      // Tìm vị trí của link trong context
-      const linkPosInContext = linkIndex - contextStart;
-      
-      // Tìm match gần link nhất
-      let nearestXau: number | null = null;
-      let nearestTot: number | null = null;
-      
-      xauMatches.forEach(match => {
-        if (match.index !== undefined) {
-          const distance = Math.abs(match.index - linkPosInContext);
-          if (nearestXau === null || distance < Math.abs(nearestXau - linkPosInContext)) {
-            nearestXau = match.index;
-          }
+      // Tìm thẻ đóng </a> tương ứng
+      let linkEndIndex = html.indexOf('</a>', linkStartIndex);
+      if (linkEndIndex === -1) {
+        // Nếu không tìm thấy </a>, tìm thẻ <a> tiếp theo
+        const nextLinkMatch = html.substring(linkStartIndex + dayLinkMatch[0].length).match(/<a[^>]*>/i);
+        if (nextLinkMatch) {
+          linkEndIndex = linkStartIndex + dayLinkMatch[0].length + html.substring(linkStartIndex + dayLinkMatch[0].length).indexOf(nextLinkMatch[0]);
+        } else {
+          // Nếu không có thẻ <a> tiếp theo, lấy 500 ký tự sau link
+          linkEndIndex = Math.min(html.length, linkStartIndex + 500);
         }
-      });
+      }
       
-      totMatches.forEach(match => {
-        if (match.index !== undefined) {
-          const distance = Math.abs(match.index - linkPosInContext);
-          if (nearestTot === null || distance < Math.abs(nearestTot - linkPosInContext)) {
-            nearestTot = match.index;
-          }
-        }
-      });
+      // Lấy nội dung trong thẻ <a> (từ sau thẻ mở đến trước thẻ đóng)
+      const linkContent = html.substring(linkStartIndex, linkEndIndex);
       
-      // Quyết định dựa trên match gần nhất
-      if (nearestXau !== null && nearestTot !== null) {
-        // Có cả hai, chọn cái gần hơn
-        const xauDistance = Math.abs(nearestXau - linkPosInContext);
-        const totDistance = Math.abs(nearestTot - linkPosInContext);
-        isGoodDay = xauDistance < totDistance ? false : true;
-      } else if (nearestXau !== null) {
+      // Tìm div "dao" đầu tiên trong nội dung thẻ <a>
+      // Pattern: <div class="dao xau"> hoặc <div class="dao tot"> hoặc <div class="dao">
+      const daoXauPattern = /<div[^>]*class\s*=\s*["'][^"']*\bdao\s+xau\b[^"']*["'][^>]*>/i;
+      const daoTotPattern = /<div[^>]*class\s*=\s*["'][^"']*\bdao\s+tot\b[^"']*["'][^>]*>/i;
+      
+      const xauMatch = linkContent.match(daoXauPattern);
+      const totMatch = linkContent.match(daoTotPattern);
+      
+      // Quyết định dựa trên match trong cùng thẻ <a>
+      if (xauMatch && totMatch) {
+        // Nếu có cả hai (không nên xảy ra), ưu tiên cái xuất hiện trước
+        const xauIndex = linkContent.indexOf(xauMatch[0]);
+        const totIndex = linkContent.indexOf(totMatch[0]);
+        isGoodDay = xauIndex < totIndex ? false : true;
+      } else if (xauMatch) {
         isGoodDay = false; // Ngày xấu
-      } else if (nearestTot !== null) {
+      } else if (totMatch) {
         isGoodDay = true; // Ngày tốt
       }
-      // Nếu không tìm thấy cả hai, isGoodDay vẫn là null (bình thường)
+      // Nếu không tìm thấy cả hai, isGoodDay vẫn là null (bình thường - không có đánh dấu)
     }
 
     const result: LunarDayInfo = {
