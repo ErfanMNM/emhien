@@ -16,7 +16,7 @@ import AlarmRingingModal from './components/AlarmRingingModal';
 import AboutPage from './components/AboutPage';
 import SweetNotificationModal from './components/SweetNotificationModal';
 import { CalendarEvent, Course, CalendarData, ScheduleMetadata, ThemeColor, AppView, MultiMonthData, BeforeInstallPromptEvent } from './types';
-import { filterEventsByCourse, shouldHideEvent, requestNotificationPermission, getThemeColors, sendNotification, syncAlarmsToWorker } from './utils';
+import { filterEventsByCourse, shouldHideEvent, requestNotificationPermission, getThemeColors, sendNotification, syncAlarmsToWorker, updateTodayFlag } from './utils';
 import { initDB, getSchedulesFromDB, getFullScheduleData, saveScheduleToDB, updateEventMetaInDB, deletePersonalEventFromDB, markEventAsNotified } from './lib/db';
 import { auth } from './lib/firebase';
 import { initFCMMessaging } from './lib/messaging';
@@ -140,9 +140,18 @@ const App: React.FC = () => {
     const fullData = getFullScheduleData(id);
     const scheduleMeta = getSchedulesFromDB().find(s => s.id === id);
     if (fullData && scheduleMeta) {
+        // Cập nhật istoday cho tất cả periods khi load
+        const updatedPeriods: Record<string, CalendarData> = {};
+        Object.entries(fullData.multiMonth.periods).forEach(([pName, pData]) => {
+            updatedPeriods[pName] = updateTodayFlag(pData);
+        });
+        
         setCurrentScheduleId(id);
         setCurrentScheduleName(scheduleMeta.name);
-        setMultiMonthData(fullData.multiMonth);
+        setMultiMonthData({
+            ...fullData.multiMonth,
+            periods: updatedPeriods
+        });
         setPersonalEvents(fullData.personalEvents);
         setCompletedEvents(new Set(fullData.completed));
         setAlarms(fullData.alarms);
@@ -327,18 +336,28 @@ const App: React.FC = () => {
 
   const handleImportSchedule = async (newData: CalendarData, name: string, isNew: boolean) => {
       setIsSaving(true);
+      // Cập nhật istoday flag dựa trên ngày hiện tại
+      const updatedData = updateTodayFlag(newData);
+      
       const id = (isNew || !currentScheduleId) ? Date.now().toString() : currentScheduleId!;
       let updatedMultiMonth: MultiMonthData;
       if (isNew || !multiMonthData) {
           updatedMultiMonth = {
-              periods: { [newData.periodname]: newData },
-              lastUpdatedPeriod: newData.periodname
+              periods: { [updatedData.periodname]: updatedData },
+              lastUpdatedPeriod: updatedData.periodname
           };
       } else {
+          // Cập nhật tất cả periods với istoday mới
+          const updatedPeriods: Record<string, CalendarData> = {};
+          Object.entries(multiMonthData.periods).forEach(([pName, pData]) => {
+              updatedPeriods[pName] = updateTodayFlag(pData);
+          });
+          updatedPeriods[updatedData.periodname] = updatedData;
+          
           updatedMultiMonth = {
               ...multiMonthData,
-              periods: { ...multiMonthData.periods, [newData.periodname]: newData },
-              lastUpdatedPeriod: newData.periodname
+              periods: updatedPeriods,
+              lastUpdatedPeriod: updatedData.periodname
           };
       }
       const eventsToKeep = isNew ? [] : personalEvents;

@@ -1,5 +1,5 @@
 
-import { CalendarEvent, ThemeColor } from "./types";
+import { CalendarEvent, ThemeColor, CalendarData } from "./types";
 
 /**
  * Converts a Unix timestamp (seconds) to a formatted date string
@@ -509,6 +509,36 @@ export const syncAlarmsToWorker = async (events: any[], alarms: Record<number, n
 };
 
 /**
+ * Cập nhật istoday cho calendar data dựa trên ngày hiện tại
+ */
+export const updateTodayFlag = (calendarData: CalendarData): CalendarData => {
+  const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const todayTimestamp = Math.floor(todayStart.getTime() / 1000);
+  
+  const updatedWeeks = calendarData.weeks.map(week => ({
+    ...week,
+    days: week.days.map(day => {
+      // So sánh timestamp để xác định ngày hôm nay
+      // Làm tròn timestamp về đầu ngày (00:00:00) để so sánh chính xác
+      const dayStart = new Date(day.timestamp * 1000);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayStartTimestamp = Math.floor(dayStart.getTime() / 1000);
+      
+      return {
+        ...day,
+        istoday: dayStartTimestamp === todayTimestamp
+      };
+    })
+  }));
+  
+  return {
+    ...calendarData,
+    weeks: updatedWeeks
+  };
+};
+
+/**
  * Lunar Calendar (Lịch Âm) Helpers
  */
 export interface LunarDayInfo {
@@ -577,29 +607,56 @@ export const getLunarDayInfo = async (timestamp: number): Promise<LunarDayInfo |
       lunarDate = `${lunarDateMatch[1]}-${lunarDateMatch[2]}-${lunarDateMatch[3]}`;
     }
 
-    // Tìm ngày tốt/xấu - thường có màu đỏ (tốt) hoặc màu tím (xấu)
+    // Tìm ngày tốt/xấu - cải thiện logic parse
     let isGoodDay: boolean | null = null;
     
-    // Kiểm tra text "MÀU ĐỎ: NGÀY TỐT" hoặc "MÀU TÍM: NGÀY XẤU"
-    if (html.includes('MÀU ĐỎ: NGÀY TỐT') || html.match(/ngày tốt/i)) {
+    // Kiểm tra text "MÀU ĐỎ: NGÀY TỐT" hoặc "MÀU TÍM: NGÀY XẤU" - tìm chính xác hơn
+    const goodDayPattern = /MÀU\s*ĐỎ[:\s]*NGÀY\s*TỐT|ngày\s*tốt/i;
+    const badDayPattern = /MÀU\s*TÍM[:\s]*NGÀY\s*XẤU|ngày\s*xấu/i;
+    
+    if (goodDayPattern.test(html)) {
       isGoodDay = true;
-    } else if (html.includes('MÀU TÍM: NGÀY XẤU') || html.match(/ngày xấu/i)) {
+    } else if (badDayPattern.test(html)) {
       isGoodDay = false;
     }
 
-    // Kiểm tra trong bảng lịch - tìm màu của ô ngày
+    // Kiểm tra trong bảng lịch - tìm link hoặc cell chứa ngày hiện tại
     if (isGoodDay === null) {
-      const dayCellPattern = new RegExp(`<td[^>]*>\\s*${day}[^<]*<[^>]*style[^>]*color[^>]*#([0-9a-fA-F]{6})`, 'i');
-      const dayCellMatch = html.match(dayCellPattern);
-      if (dayCellMatch) {
-        const color = dayCellMatch[1].toLowerCase();
-        // Màu đỏ (ff0000, ffxxxx) hoặc xanh lá (00ff00) = tốt
-        if (color.startsWith('ff') || color === '00ff00' || color.includes('green')) {
-          isGoodDay = true;
+      // Tìm trong bảng lịch tháng - tìm link có chứa ngày
+      const dayLinkPattern = new RegExp(`<a[^>]*href[^>]*ngay[/-]${day}[^>]*>`, 'i');
+      const dayLinkMatch = html.match(dayLinkPattern);
+      
+      if (dayLinkMatch) {
+        // Tìm màu của link hoặc cell chứa link này
+        const linkIndex = html.indexOf(dayLinkMatch[0]);
+        const beforeLink = html.substring(Math.max(0, linkIndex - 500), linkIndex);
+        const afterLink = html.substring(linkIndex, Math.min(html.length, linkIndex + 500));
+        const context = beforeLink + afterLink;
+        
+        // Tìm màu trong context
+        const colorMatch = context.match(/color[^:]*:\s*#([0-9a-fA-F]{6})|color[^:]*:\s*(red|green|purple|violet)/i);
+        if (colorMatch) {
+          const color = colorMatch[1]?.toLowerCase() || colorMatch[2]?.toLowerCase();
+          if (color === 'red' || color === 'green' || (color && color.startsWith('ff'))) {
+            isGoodDay = true;
+          } else if (color === 'purple' || color === 'violet' || (color && (color.startsWith('8') || color.startsWith('9')))) {
+            isGoodDay = false;
+          }
         }
-        // Màu tím (8000ff, 9xxxff) = xấu
-        else if (color.startsWith('8') || color.startsWith('9') || color.includes('8000ff')) {
-          isGoodDay = false;
+      }
+      
+      // Nếu vẫn chưa tìm thấy, thử tìm trong bảng lịch với pattern khác
+      if (isGoodDay === null) {
+        // Tìm cell có chứa ngày và có style màu
+        const cellPattern = new RegExp(`<td[^>]*>\\s*(<[^>]*>)*\\s*${day}\\s*(<[^>]*>)*[^<]*style[^>]*color[^:]*:([^;>]+)`, 'i');
+        const cellMatch = html.match(cellPattern);
+        if (cellMatch && cellMatch[3]) {
+          const colorValue = cellMatch[3].trim().toLowerCase();
+          if (colorValue.includes('red') || colorValue.includes('#ff') || colorValue.includes('green')) {
+            isGoodDay = true;
+          } else if (colorValue.includes('purple') || colorValue.includes('violet') || colorValue.includes('#8') || colorValue.includes('#9')) {
+            isGoodDay = false;
+          }
         }
       }
     }
