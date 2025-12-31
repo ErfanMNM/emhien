@@ -548,33 +548,114 @@ export interface LunarDayInfo {
 
 // Cache để tránh request nhiều lần
 const lunarCache = new Map<string, LunarDayInfo>();
+const lunarMonthCache = new Map<string, Map<number, LunarDayInfo>>(); // Cache theo tháng
 const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 giờ
 
 /**
- * Lấy thông tin lịch âm cho một ngày cụ thể
- * Sử dụng CORS proxy hoặc direct fetch nếu có thể
+ * Parse lịch âm từ HTML trang lịch tháng
+ * Trả về Map với key là ngày dương, value là LunarDayInfo
  */
-export const getLunarDayInfo = async (timestamp: number): Promise<LunarDayInfo | null> => {
-  const date = new Date(timestamp * 1000);
-  const dateKey = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+const parseLunarMonthFromHTML = (html: string, year: number, month: number): Map<number, LunarDayInfo> => {
+  const results = new Map<number, LunarDayInfo>();
   
-  // Kiểm tra cache
-  const cached = lunarCache.get(dateKey);
+  // Tìm tất cả các thẻ <td> chứa link đến ngày
+  const tdPattern = /<td[^>]*>.*?<a[^>]*href="\/am-lich\/nam\/\d+\/thang\/\d+\/ngay\/(\d+)"[^>]*>([\s\S]*?)<\/a>.*?<\/td>/gi;
+  
+  let match;
+  let lastAmMonth: number | null = null; // Lưu tháng âm của ngày trước
+  
+  while ((match = tdPattern.exec(html)) !== null) {
+    const dayNumber = parseInt(match[1]);
+    const linkContent = match[2];
+    
+    // Tìm ngày dương
+    const duongMatch = linkContent.match(/<div[^>]*class\s*=\s*["']duong[^"']*["'][^>]*>(\d+)<\/div>/i);
+    const duongDay = duongMatch ? parseInt(duongMatch[1]) : null;
+    
+    if (!duongDay) continue;
+    
+    // Tìm ngày âm
+    let amDay: number | null = null;
+    let amMonth: number | null = null;
+    let amText: string | null = null;
+    
+    // Tìm toàn bộ nội dung trong thẻ div class="am"
+    const amDivMatch = linkContent.match(/<div[^>]*class\s*=\s*["']am[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
+    
+    if (amDivMatch) {
+      const amContent = amDivMatch[1];
+      
+      // Tìm số trong thẻ span có style (thường là ngày/tháng đặc biệt)
+      const spanStyleMatch = amContent.match(/<span[^>]*style[^>]*>(\d+\/\d+)<\/span>/i);
+      if (spanStyleMatch) {
+        // Có format trong span với style
+        const parts = spanStyleMatch[1].split('/');
+        amDay = parseInt(parts[0]);
+        amMonth = parseInt(parts[1]);
+        amText = spanStyleMatch[1];
+        lastAmMonth = amMonth; // Cập nhật tháng âm hiện tại
+      } else {
+        // Tìm số đầu tiên trong nội dung (có thể là "12/10" hoặc "13")
+        const textMatch = amContent.match(/(\d+\/\d+|\d+)/);
+        if (textMatch) {
+          const text = textMatch[1];
+          amText = text;
+          if (text.includes('/')) {
+            // Có format đầy đủ "X/Y"
+            const parts = text.split('/');
+            amDay = parseInt(parts[0]);
+            amMonth = parseInt(parts[1]);
+            lastAmMonth = amMonth; // Cập nhật tháng âm hiện tại
+          } else {
+            // Chỉ có số đơn, dùng tháng của ngày trước đó
+            amDay = parseInt(text);
+            amMonth = lastAmMonth; // Dùng tháng âm của ngày trước
+          }
+        }
+      }
+    }
+    
+    // Tìm trạng thái tốt/xấu
+    let isGoodDay: boolean | null = null;
+    if (linkContent.includes('class="dao xau"') || linkContent.includes("class='dao xau'")) {
+      isGoodDay = false;
+    } else if (linkContent.includes('class="dao tot"') || linkContent.includes("class='dao tot'")) {
+      isGoodDay = true;
+    }
+    
+    // Tạo lunarDate string
+    let lunarDate = '';
+    if (amDay !== null && amMonth !== null) {
+      lunarDate = `${amDay}-${amMonth}-${year}`;
+    }
+    
+    const info: LunarDayInfo = {
+      lunarDate: lunarDate || `${duongDay}-${month}-${year}`,
+      isGoodDay
+    };
+    
+    results.set(duongDay, info);
+  }
+  
+  return results;
+};
+
+/**
+ * Lấy thông tin lịch âm cho một tháng (tối ưu - fetch một lần cho cả tháng)
+ */
+const getLunarMonthInfo = async (year: number, month: number): Promise<Map<number, LunarDayInfo>> => {
+  const monthKey = `${year}-${month}`;
+  
+  // Kiểm tra cache tháng
+  const cached = lunarMonthCache.get(monthKey);
   if (cached) {
     return cached;
   }
-
+  
   try {
-    // Format ngày để query xemlicham.com
-    const day = date.getDate();
-    const month = date.getMonth() + 1;
-    const year = date.getFullYear();
+    // Fetch trang lịch tháng
+    const url = `https://www.xemlicham.com/am-lich/nam/${year}/thang/${month}`;
     
-    // URL format: https://www.xemlicham.com/am-lich/nam/{year}/thang/{month}/ngay/{day}
-    // Sử dụng CORS proxy nếu cần (có thể thay bằng API của bạn)
-    const url = `https://www.xemlicham.com/am-lich/nam/${year}/thang/${month}/ngay/${day}`;
-    
-    // Thử fetch trực tiếp (có thể bị CORS block)
     let response: Response;
     try {
       response = await fetch(url, {
@@ -585,94 +666,74 @@ export const getLunarDayInfo = async (timestamp: number): Promise<LunarDayInfo |
         }
       });
     } catch (corsError) {
-      // Nếu bị CORS, thử dùng proxy hoặc fallback
-      console.warn('[Lunar] CORS error, sử dụng fallback pattern');
-      return getLunarDayInfoFallback(timestamp);
+      console.warn('[Lunar] CORS error khi fetch tháng');
+      return new Map();
     }
-
+    
     if (!response.ok) {
-      console.warn(`[Lunar] Không thể lấy dữ liệu cho ${dateKey}, dùng fallback`);
-      return getLunarDayInfoFallback(timestamp);
+      console.warn(`[Lunar] Không thể lấy dữ liệu tháng ${monthKey}`);
+      return new Map();
     }
-
+    
     const html = await response.text();
+    const monthData = parseLunarMonthFromHTML(html, year, month);
     
-    // Parse HTML để lấy thông tin
-    // Tìm ngày âm lịch - thường có format như "10-11-2025" hoặc "10/11/2025"
-    const lunarDateMatch = html.match(/Âm Lịch[^<]*(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/i) ||
-                              html.match(/ngày[^<]*(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/i);
-    
-    let lunarDate = '';
-    if (lunarDateMatch) {
-      lunarDate = `${lunarDateMatch[1]}-${lunarDateMatch[2]}-${lunarDateMatch[3]}`;
-    }
-
-    // Tìm ngày tốt/xấu - tìm class "dao xau", "dao tot" trong cùng thẻ <a> chứa link đến ngày
-    let isGoodDay: boolean | null = null;
-    
-    // Tìm thẻ <a> chứa link đến ngày hiện tại
-    // Pattern: <a href="...ngay/31" ...> hoặc <a href="...ngay-31" ...>
-    const dayLinkPattern = new RegExp(`<a[^>]*href[^>]*ngay[/-]${day}(?:["'\\s>]|$)`, 'i');
-    const dayLinkMatch = html.match(dayLinkPattern);
-    
-    if (dayLinkMatch) {
-      const linkStartIndex = html.indexOf(dayLinkMatch[0]);
-      
-      // Tìm thẻ đóng </a> tương ứng
-      let linkEndIndex = html.indexOf('</a>', linkStartIndex);
-      if (linkEndIndex === -1) {
-        // Nếu không tìm thấy </a>, tìm thẻ <a> tiếp theo
-        const nextLinkMatch = html.substring(linkStartIndex + dayLinkMatch[0].length).match(/<a[^>]*>/i);
-        if (nextLinkMatch) {
-          linkEndIndex = linkStartIndex + dayLinkMatch[0].length + html.substring(linkStartIndex + dayLinkMatch[0].length).indexOf(nextLinkMatch[0]);
-        } else {
-          // Nếu không có thẻ <a> tiếp theo, lấy 500 ký tự sau link
-          linkEndIndex = Math.min(html.length, linkStartIndex + 500);
-        }
-      }
-      
-      // Lấy nội dung trong thẻ <a> (từ sau thẻ mở đến trước thẻ đóng)
-      const linkContent = html.substring(linkStartIndex, linkEndIndex);
-      
-      // Tìm div "dao" đầu tiên trong nội dung thẻ <a>
-      // Pattern: <div class="dao xau"> hoặc <div class="dao tot"> hoặc <div class="dao">
-      const daoXauPattern = /<div[^>]*class\s*=\s*["'][^"']*\bdao\s+xau\b[^"']*["'][^>]*>/i;
-      const daoTotPattern = /<div[^>]*class\s*=\s*["'][^"']*\bdao\s+tot\b[^"']*["'][^>]*>/i;
-      
-      const xauMatch = linkContent.match(daoXauPattern);
-      const totMatch = linkContent.match(daoTotPattern);
-      
-      // Quyết định dựa trên match trong cùng thẻ <a>
-      if (xauMatch && totMatch) {
-        // Nếu có cả hai (không nên xảy ra), ưu tiên cái xuất hiện trước
-        const xauIndex = linkContent.indexOf(xauMatch[0]);
-        const totIndex = linkContent.indexOf(totMatch[0]);
-        isGoodDay = xauIndex < totIndex ? false : true;
-      } else if (xauMatch) {
-        isGoodDay = false; // Ngày xấu
-      } else if (totMatch) {
-        isGoodDay = true; // Ngày tốt
-      }
-      // Nếu không tìm thấy cả hai, isGoodDay vẫn là null (bình thường - không có đánh dấu)
-    }
-
-    const result: LunarDayInfo = {
-      lunarDate: lunarDate || dateKey,
-      isGoodDay
-    };
-
-    // Lưu vào cache
-    lunarCache.set(dateKey, result);
+    // Lưu vào cache tháng
+    lunarMonthCache.set(monthKey, monthData);
     
     // Xóa cache sau 24 giờ
     setTimeout(() => {
-      lunarCache.delete(dateKey);
+      lunarMonthCache.delete(monthKey);
     }, CACHE_DURATION);
+    
+    return monthData;
+  } catch (error) {
+    console.error('[Lunar] Lỗi khi lấy thông tin lịch âm tháng:', error);
+    return new Map();
+  }
+};
 
-    return result;
+/**
+ * Lấy thông tin lịch âm cho một ngày cụ thể
+ * Tối ưu: fetch trang lịch tháng một lần và parse tất cả ngày
+ */
+export const getLunarDayInfo = async (timestamp: number): Promise<LunarDayInfo | null> => {
+  const date = new Date(timestamp * 1000);
+  const dateKey = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+  
+  // Kiểm tra cache ngày
+  const cached = lunarCache.get(dateKey);
+  if (cached) {
+    return cached;
+  }
+
+  try {
+    const day = date.getDate();
+    const month = date.getMonth() + 1;
+    const year = date.getFullYear();
+    
+    // Lấy thông tin cả tháng (tối ưu - fetch một lần)
+    const monthData = await getLunarMonthInfo(year, month);
+    
+    // Lấy thông tin ngày cụ thể
+    const dayInfo = monthData.get(day);
+    
+    if (dayInfo) {
+      // Lưu vào cache ngày
+      lunarCache.set(dateKey, dayInfo);
+      
+      // Xóa cache sau 24 giờ
+      setTimeout(() => {
+        lunarCache.delete(dateKey);
+      }, CACHE_DURATION);
+      
+      return dayInfo;
+    }
+    
+    // Nếu không tìm thấy, dùng fallback
+    return getLunarDayInfoFallback(timestamp);
   } catch (error) {
     console.error('[Lunar] Lỗi khi lấy thông tin lịch âm:', error);
-    // Fallback nếu có lỗi
     return getLunarDayInfoFallback(timestamp);
   }
 };
@@ -702,18 +763,41 @@ const getLunarDayInfoFallback = (timestamp: number): LunarDayInfo | null => {
 
 /**
  * Lấy thông tin lịch âm cho nhiều ngày (batch)
+ * Tối ưu: nhóm theo tháng và fetch một lần cho mỗi tháng
  */
 export const getLunarDayInfoBatch = async (timestamps: number[]): Promise<Map<number, LunarDayInfo>> => {
   const results = new Map<number, LunarDayInfo>();
   
-  // Lấy thông tin cho từng ngày (có thể tối ưu sau)
-  const promises = timestamps.map(async (ts) => {
-    const info = await getLunarDayInfo(ts);
-    if (info) {
-      results.set(ts, info);
+  // Nhóm timestamps theo tháng
+  const monthGroups = new Map<string, number[]>();
+  
+  timestamps.forEach(ts => {
+    const date = new Date(ts * 1000);
+    const monthKey = `${date.getFullYear()}-${date.getMonth() + 1}`;
+    
+    if (!monthGroups.has(monthKey)) {
+      monthGroups.set(monthKey, []);
     }
+    monthGroups.get(monthKey)!.push(ts);
   });
-
+  
+  // Fetch từng tháng một lần và lấy tất cả ngày trong tháng đó
+  const promises = Array.from(monthGroups.entries()).map(async ([monthKey, tsArray]) => {
+    const [year, month] = monthKey.split('-').map(Number);
+    const monthData = await getLunarMonthInfo(year, month);
+    
+    // Map lại từ timestamp sang day number
+    tsArray.forEach(ts => {
+      const date = new Date(ts * 1000);
+      const day = date.getDate();
+      const dayInfo = monthData.get(day);
+      
+      if (dayInfo) {
+        results.set(ts, dayInfo);
+      }
+    });
+  });
+  
   await Promise.all(promises);
   return results;
 };
