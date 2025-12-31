@@ -563,8 +563,10 @@ const parseLunarMonthFromHTML = (html: string, year: number, month: number): Map
   
   let match;
   let lastAmMonth: number | null = null; // Lưu tháng âm của ngày trước
+  let matchCount = 0;
   
   while ((match = tdPattern.exec(html)) !== null) {
+    matchCount++;
     const dayNumber = parseInt(match[1]);
     const linkContent = match[2];
     
@@ -637,6 +639,8 @@ const parseLunarMonthFromHTML = (html: string, year: number, month: number): Map
     results.set(duongDay, info);
   }
   
+  console.log(`[Lunar] Parse: tìm thấy ${matchCount} thẻ <td>, parse được ${results.size} ngày`);
+  
   return results;
 };
 
@@ -649,15 +653,18 @@ const getLunarMonthInfo = async (year: number, month: number): Promise<Map<numbe
   // Kiểm tra cache tháng
   const cached = lunarMonthCache.get(monthKey);
   if (cached) {
+    console.log(`[Lunar] Cache hit cho tháng ${monthKey}`);
     return cached;
   }
   
   try {
-    // Fetch trang lịch tháng
+    // Fetch trang lịch tháng - thử dùng proxy qua worker nếu có
     const url = `https://www.xemlicham.com/am-lich/nam/${year}/thang/${month}`;
+    console.log(`[Lunar] Fetching tháng ${monthKey} từ ${url}`);
     
     let response: Response;
     try {
+      // Thử fetch trực tiếp trước
       response = await fetch(url, {
         method: 'GET',
         mode: 'cors',
@@ -666,17 +673,27 @@ const getLunarMonthInfo = async (year: number, month: number): Promise<Map<numbe
         }
       });
     } catch (corsError) {
-      console.warn('[Lunar] CORS error khi fetch tháng');
-      return new Map();
+      console.warn('[Lunar] CORS error khi fetch trực tiếp, thử qua proxy:', corsError);
+      // Thử qua proxy worker nếu có
+      try {
+        const proxyUrl = `${window.location.origin}/api/lunar-proxy?url=${encodeURIComponent(url)}`;
+        response = await fetch(proxyUrl);
+      } catch (proxyError) {
+        console.warn('[Lunar] Proxy cũng thất bại:', proxyError);
+        return new Map();
+      }
     }
     
     if (!response.ok) {
-      console.warn(`[Lunar] Không thể lấy dữ liệu tháng ${monthKey}`);
+      console.warn(`[Lunar] HTTP ${response.status} khi lấy dữ liệu tháng ${monthKey}`);
       return new Map();
     }
     
     const html = await response.text();
+    console.log(`[Lunar] Đã nhận ${html.length} ký tự HTML cho tháng ${monthKey}`);
+    
     const monthData = parseLunarMonthFromHTML(html, year, month);
+    console.log(`[Lunar] Đã parse ${monthData.size} ngày từ tháng ${monthKey}`);
     
     // Lưu vào cache tháng
     lunarMonthCache.set(monthKey, monthData);
@@ -768,6 +785,13 @@ const getLunarDayInfoFallback = (timestamp: number): LunarDayInfo | null => {
 export const getLunarDayInfoBatch = async (timestamps: number[]): Promise<Map<number, LunarDayInfo>> => {
   const results = new Map<number, LunarDayInfo>();
   
+  if (timestamps.length === 0) {
+    console.log('[Lunar] Không có timestamps để xử lý');
+    return results;
+  }
+  
+  console.log(`[Lunar] Bắt đầu batch cho ${timestamps.length} ngày`);
+  
   // Nhóm timestamps theo tháng
   const monthGroups = new Map<string, number[]>();
   
@@ -781,9 +805,13 @@ export const getLunarDayInfoBatch = async (timestamps: number[]): Promise<Map<nu
     monthGroups.get(monthKey)!.push(ts);
   });
   
+  console.log(`[Lunar] Nhóm thành ${monthGroups.size} tháng:`, Array.from(monthGroups.keys()));
+  
   // Fetch từng tháng một lần và lấy tất cả ngày trong tháng đó
   const promises = Array.from(monthGroups.entries()).map(async ([monthKey, tsArray]) => {
     const [year, month] = monthKey.split('-').map(Number);
+    console.log(`[Lunar] Fetching tháng ${monthKey} cho ${tsArray.length} ngày`);
+    
     const monthData = await getLunarMonthInfo(year, month);
     
     // Map lại từ timestamp sang day number
@@ -794,10 +822,14 @@ export const getLunarDayInfoBatch = async (timestamps: number[]): Promise<Map<nu
       
       if (dayInfo) {
         results.set(ts, dayInfo);
+        console.log(`[Lunar] Đã map ngày ${day} tháng ${month} (timestamp ${ts})`);
+      } else {
+        console.warn(`[Lunar] Không tìm thấy thông tin cho ngày ${day} tháng ${month} (timestamp ${ts})`);
       }
     });
   });
   
   await Promise.all(promises);
+  console.log(`[Lunar] Batch hoàn thành: ${results.size}/${timestamps.length} ngày có dữ liệu`);
   return results;
 };

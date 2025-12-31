@@ -134,6 +134,47 @@ export default {
       }
     }
 
+    // Endpoint: proxy để fetch lịch âm (tránh CORS)
+    if (request.method === 'GET' && url.pathname === '/api/lunar-proxy') {
+      try {
+        const targetUrl = url.searchParams.get('url');
+        if (!targetUrl) {
+          return new Response(JSON.stringify({ error: 'Missing url parameter' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+
+        const proxyResponse = await fetch(targetUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'text/html',
+          },
+        });
+
+        if (!proxyResponse.ok) {
+          return new Response(JSON.stringify({ error: 'Proxy fetch failed' }), {
+            status: proxyResponse.status,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+
+        const html = await proxyResponse.text();
+        return new Response(html, {
+          headers: {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Access-Control-Allow-Origin': '*',
+          },
+        });
+      } catch (err) {
+        console.error('Lunar proxy error', err);
+        return new Response(JSON.stringify({ error: 'Proxy failed' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
     // Endpoint: đồng bộ alarms data từ client lên Worker
     // Worker sẽ lưu vào KV hoặc memory để check và gửi push khi đến giờ
     if (request.method === 'POST' && url.pathname === '/api/push/sync-alarms') {
