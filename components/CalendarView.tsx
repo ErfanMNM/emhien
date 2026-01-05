@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { CalendarData, CalendarEvent, CalendarDay, ThemeColor } from '../types';
 import { getEventStyle, isVideoConference, shouldHideEvent, formatDate, getThemeColors, cleanHtml, getLunarDayInfoBatch, LunarDayInfo } from '../utils';
 import { Video, ChevronRight, Calendar as CalendarIcon, ChevronLeft, ChevronRight as ChevronRightIcon, Clock, MapPin, CheckCircle2 } from 'lucide-react';
@@ -37,9 +37,54 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   const [selectedTimestamp, setSelectedTimestamp] = useState<number | null>(null);
   const [lunarInfoMap, setLunarInfoMap] = useState<Map<number, LunarDayInfo>>(new Map());
   const theme = getThemeColors(themeColor);
+  const hasInitialized = useRef(false);
+  const prevPeriodNamesRef = useRef<string[]>([]);
 
   const activePeriodName = periodNames[activePeriodIndex];
   const activeData = periods[activePeriodName];
+
+  // Tự động chuyển đến tháng hiện tại khi component mount lần đầu hoặc khi periods thay đổi hoàn toàn
+  useEffect(() => {
+    if (periodNames.length === 0) return;
+    
+    // Reset initialization nếu periodNames thay đổi hoàn toàn (load schedule mới)
+    const periodNamesChanged = prevPeriodNamesRef.current.length !== periodNames.length ||
+      prevPeriodNamesRef.current.some((name, idx) => name !== periodNames[idx]);
+    
+    if (periodNamesChanged) {
+      hasInitialized.current = false;
+      prevPeriodNamesRef.current = [...periodNames];
+    }
+    
+    // Chỉ tự động chuyển nếu chưa khởi tạo hoặc đang ở index 0 (tháng đầu tiên)
+    if (!hasInitialized.current || activePeriodIndex === 0) {
+      // Tìm period nào có ngày hôm nay
+      let foundIndex = -1;
+      for (let i = 0; i < periodNames.length; i++) {
+        const periodData = periods[periodNames[i]];
+        if (periodData) {
+          for (const week of periodData.weeks) {
+            for (const day of week.days) {
+              if (day.istoday) {
+                foundIndex = i;
+                break;
+              }
+            }
+            if (foundIndex !== -1) break;
+          }
+          if (foundIndex !== -1) break;
+        }
+      }
+      
+      // Nếu tìm thấy tháng có ngày hôm nay, chuyển đến tháng đó
+      if (foundIndex !== -1 && foundIndex !== activePeriodIndex) {
+        setActivePeriodIndex(foundIndex);
+        hasInitialized.current = true;
+      } else if (!hasInitialized.current) {
+        hasInitialized.current = true;
+      }
+    }
+  }, [periodNames, periods, activePeriodIndex]);
 
   // Load thông tin lịch âm cho các ngày trong tháng hiện tại
   useEffect(() => {
