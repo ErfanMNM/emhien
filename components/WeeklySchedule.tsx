@@ -33,19 +33,27 @@ const WeeklySchedule: React.FC<WeeklyScheduleProps> = ({
       const currentDay = startOfWeek.getDay();
       const distanceToMonday = currentDay === 0 ? 6 : currentDay - 1;
       
+      // Thứ 2 tuần hiện tại (00:00)
       startOfWeek.setDate(now.getDate() - distanceToMonday);
       startOfWeek.setHours(0, 0, 0, 0);
       
+      // Thứ 2 tuần tiếp theo (00:00) - dùng cho hiển thị label
       const nextMonday = new Date(startOfWeek);
       nextMonday.setDate(startOfWeek.getDate() + 7);
       nextMonday.setHours(0, 0, 0, 0);
+
+      // Biên phải để filter: 00:00 của thứ 3 tuần tiếp theo
+      // => bao trùm toàn bộ thứ 2 tuần tiếp theo (đến 23:59:59)
+      const endBoundary = new Date(nextMonday);
+      endBoundary.setDate(nextMonday.getDate() + 1);
+      endBoundary.setHours(0, 0, 0, 0);
 
       const fStart = `${startOfWeek.getDate()}/${startOfWeek.getMonth() + 1}`;
       const fEnd = `${nextMonday.getDate()}/${nextMonday.getMonth() + 1}`;
 
       return {
           startTimestamp: Math.floor(startOfWeek.getTime() / 1000),
-          endTimestamp: Math.floor(nextMonday.getTime() / 1000),
+          endTimestamp: Math.floor(endBoundary.getTime() / 1000),
           rangeLabel: `${fStart} - ${fEnd}`
       };
   }, []);
